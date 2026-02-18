@@ -1,0 +1,89 @@
+# Godot
+.import/
+.export/
+.export_presets.cfg
+*.godot
+# Ignore local editor settings
+.editor/
+.editorsettings
+
+# Godot 4 cache and temp
+.cache/
+.godot/            # sometimes used for local config, ignore if present
+
+# Godot Android export & Build artifacts
+android/build/
+android/*.apk
+android/*.aab
+gradle/
+.gradle/
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+.gradle/
+build/
+captures/
+
+# Python / backend
+__pycache__/
+*.pyc
+venv/
+env/
+.env
+.Python
+pip-wheel-metadata/
+dist/
+build/
+
+# Uvicorn / logs
+*.log
+
+# Node / frontend (if you add a frontend)
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Blender / 3D assets
+*.blend1
+*.blend2
+*.blend@*
+*.tmp
+__export__/            # Blender auto export folder if you use one
+
+# Model exports & temporary files
+*.fbx
+*.obj
+*.dae
+*.gltf
+*.glb
+*.zip
+
+# VSCode
+.vscode/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Misc IDEs
+*.sublime-project
+*.sublime-workspace
+
+# Secrets - ensure you don't accidentally check keystores or credentials
+*.keystore
+.keystore
+*.jks
+*.pem
+*.p12
+*.pfx
+secrets.json
+credentials.json
+
+# Local test servers
+backend_stub/__pycache__/
+backend_stub/*.db

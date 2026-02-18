@@ -1,0 +1,18 @@
+{
+  "nodes": {
+	"n_start": [0.0, 0.0, 0.0],
+	"n_hall1": [2.0, 0.0, 0.0],
+	"n_room101": [4.0, 0.0, 0.0],
+	"n_room102": [4.0, 0.0, 2.0]
+  },
+  "edges": {
+	"n_start": ["n_hall1"],
+	"n_hall1": ["n_start", "n_room101", "n_room102"],
+	"n_room101": ["n_hall1"],
+	"n_room102": ["n_hall1"]
+  },
+  "room_node_map": {
+	"room_101": "n_room101",
+	"room_102": "n_room102"
+  }
+}

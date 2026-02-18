@@ -1,0 +1,19 @@
+[gd_scene format=3 uid="uid://beqydhgji6str"]
+
+[ext_resource type="PackedScene" uid="uid://b57hwb3r76ppn" path="res://scenes/Building.tscn" id="1_rvslj"]
+[ext_resource type="PackedScene" uid="uid://bh3vhq7uxpufm" path="res://scenes/UI.tscn" id="2_0bbpv"]
+
+[node name="Main" type="Node3D" unique_id=969123151]
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=435535344]
+transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 6, 10)
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1329604801]
+
+[node name="Building" parent="." unique_id=1352195737 instance=ExtResource("1_rvslj")]
+
+[node name="NavigationLink3D" type="NavigationLink3D" parent="." unique_id=906852801]
+
+[node name="Node" type="Node" parent="." unique_id=859165324]
+
+[node name="Ui" parent="." unique_id=205720764 instance=ExtResource("2_0bbpv")]

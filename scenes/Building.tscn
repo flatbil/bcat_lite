@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://b57hwb3r76ppn"]
+
+[ext_resource type="Script" uid="uid://ujq38idriw5l" path="res://scripts/building_loader.gd" id="1_dasbu"]
+
+[node name="Building" type="Node3D" unique_id=1352195737]
+script = ExtResource("1_dasbu")
+
+[node name="ModelContainer" type="Node3D" parent="." unique_id=235976920]
+
+[node name="RoomOverlays" type="Node3D" parent="." unique_id=114126705]
