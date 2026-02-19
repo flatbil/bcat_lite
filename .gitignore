@@ -1,8 +1,8 @@
 # Godot
 .import/
 .export/
-.export_presets.cfg
-*.godot
+# export_presets.cfg is tracked — it contains Android package/permission config.
+# Do NOT commit signing keystore passwords if you add release signing.
 # Ignore local editor settings
 .editor/
 .editorsettings

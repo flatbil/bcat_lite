@@ -1,24 +1,374 @@
-# ui.gd
+# ui.gd — all UI built in code
 extends Control
 
-var target_room_id := ""
+signal navigate_requested(room_id: String)
+signal navigation_cleared
+signal room_info_requested(room_id: String)
 
-func _ready():
-	$VBoxContainer/btn_route.pressed.connect(Callable(self, "_on_route_pressed"))
+var _room_data:      Array        = []
+var _status_dots:    Dictionary   = {}   # room_id -> ColorRect
+var _room_list:      VBoxContainer
+var _nav_panel:      PanelContainer
+var _dest_label:     Label
+var _steps_label:    RichTextLabel
+var _popup:          Control      = null
+var _popup_backdrop: ColorRect    = null
+var _popup_room_id:  String       = ""
 
-func _on_route_pressed():
-	# For demo, route to room_101
-	target_room_id = "room_101"
-	get_tree().get_root().get_node("Main").call_deferred("_on_route_request", target_room_id)
+func _ready() -> void:
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_build_left_panel()
+	_build_nav_panel()
 
-func get_target_room_id() -> String:
-	return target_room_id
+# ── Left panel ────────────────────────────────────────────────────────────────
 
-func display_route(points: Array):
-	# Clear existing Line3D if any, then draw a new Line3D under UI parent or in 3D world
-	# For simplicity we update instruction label with a textual list
-	var s = ""
-	for i in range(points.size()):
-		var p = points[i]
-		s += "Step %d: (%.1f, %.1f) \n" % [i+1, p.x, p.z]
-	$VBoxContainer/lbl_instruction.text = s
+func _build_left_panel() -> void:
+	var panel = PanelContainer.new()
+	panel.name = "LeftPanel"
+	panel.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
+	panel.custom_minimum_size = Vector2(260, 0)
+	add_child(panel)
+
+	var vbox = VBoxContainer.new()
+	panel.add_child(vbox)
+
+	var header = Label.new()
+	header.text = "Conference Rooms"
+	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var hs = StyleBoxFlat.new()
+	hs.bg_color = Color(0.11, 0.20, 0.40)
+	hs.content_margin_top = 10.0; hs.content_margin_bottom = 10.0
+	hs.content_margin_left = 6.0; hs.content_margin_right = 6.0
+	header.add_theme_stylebox_override("normal", hs)
+	header.add_theme_color_override("font_color", Color.WHITE)
+	header.add_theme_font_size_override("font_size", 15)
+	vbox.add_child(header)
+
+	var hint = Label.new()
+	hint.text = "ℹ = schedule   Go = navigate"
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_font_size_override("font_size", 10)
+	hint.add_theme_color_override("font_color", Color(0.60, 0.60, 0.60))
+	vbox.add_child(hint)
+
+	vbox.add_child(HSeparator.new())
+
+	var scroll = ScrollContainer.new()
+	scroll.name = "Scroll"
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(scroll)
+
+	_room_list = VBoxContainer.new()
+	_room_list.name = "RoomList"
+	_room_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_room_list)
+
+# ── Right nav panel ───────────────────────────────────────────────────────────
+
+func _build_nav_panel() -> void:
+	_nav_panel = PanelContainer.new()
+	_nav_panel.name = "NavPanel"
+	_nav_panel.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
+	_nav_panel.custom_minimum_size = Vector2(240, 0)
+	_nav_panel.visible = false
+	add_child(_nav_panel)
+
+	var vbox = VBoxContainer.new()
+	_nav_panel.add_child(vbox)
+
+	var nh = Label.new()
+	nh.text = "Navigation"
+	nh.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var nhs = StyleBoxFlat.new()
+	nhs.bg_color = Color(0.08, 0.30, 0.12)
+	nhs.content_margin_top = 10.0; nhs.content_margin_bottom = 10.0
+	nh.add_theme_stylebox_override("normal", nhs)
+	nh.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(nh)
+
+	_dest_label = Label.new()
+	_dest_label.text = "Destination: —"
+	_dest_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(_dest_label)
+
+	_steps_label = RichTextLabel.new()
+	_steps_label.bbcode_enabled = true
+	_steps_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_steps_label.fit_content = true
+	_steps_label.scroll_active = false
+	vbox.add_child(_steps_label)
+
+	var clear_btn = Button.new()
+	clear_btn.text = "✕  Clear Route"
+	clear_btn.pressed.connect(_on_clear_pressed)
+	vbox.add_child(clear_btn)
+
+# ── Public API ────────────────────────────────────────────────────────────────
+
+func set_room_data(rooms: Array) -> void:
+	_room_data = rooms
+	_rebuild_room_list()
+
+func _rebuild_room_list() -> void:
+	if _room_list == null:
+		return
+	for child in _room_list.get_children():
+		child.queue_free()
+	_status_dots.clear()
+
+	for room in _room_data:
+		var id: String  = room["id"]
+		var avail: bool = room.get("available", true)
+
+		var row = HBoxContainer.new()
+		row.name = "Row_" + id
+
+		# Availability dot
+		var dot = ColorRect.new()
+		dot.custom_minimum_size = Vector2(12, 12)
+		dot.color = Color.GREEN if avail else Color.RED
+		_status_dots[id] = dot
+		row.add_child(dot)
+
+		# Name + capacity
+		var info = Label.new()
+		info.text = "%s (%d)" % [room["name"], room["capacity"]]
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_theme_font_size_override("font_size", 12)
+		row.add_child(info)
+
+		# Info / schedule button
+		var info_btn = Button.new()
+		info_btn.text = "ℹ"
+		info_btn.tooltip_text = "View schedule"
+		info_btn.custom_minimum_size = Vector2(28, 0)
+		info_btn.pressed.connect(_on_info_pressed.bind(id))
+		row.add_child(info_btn)
+
+		# Navigate button
+		var go_btn = Button.new()
+		go_btn.text = "Go"
+		go_btn.pressed.connect(_on_go_pressed.bind(id))
+		row.add_child(go_btn)
+
+		_room_list.add_child(row)
+
+func update_availability(data: Dictionary) -> void:
+	for room_id in _status_dots:
+		var avail = data.get(room_id, {}).get("available", true)
+		_status_dots[room_id].color = Color.GREEN if avail else Color.RED
+
+func show_navigation(room_id: String, points: Array) -> void:
+	var room_name = room_id
+	for r in _room_data:
+		if r["id"] == room_id:
+			room_name = r["name"]
+			break
+	_dest_label.text = "→  " + room_name
+	_steps_label.text = _build_directions_bbcode(points)
+	_nav_panel.visible = true
+
+func clear_route() -> void:
+	_nav_panel.visible = false
+	_steps_label.text = ""
+
+# ── Meeting popup ─────────────────────────────────────────────────────────────
+
+func show_room_popup(room_id: String, room_data: Dictionary) -> void:
+	_close_popup()
+	_popup_room_id = room_id
+
+	# Semi-transparent backdrop — clicking it closes the popup
+	_popup_backdrop = ColorRect.new()
+	_popup_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_popup_backdrop.color = Color(0, 0, 0, 0.42)
+	_popup_backdrop.z_index = 9
+	_popup_backdrop.gui_input.connect(func(e: InputEvent) -> void:
+		if e is InputEventMouseButton and e.pressed:
+			_close_popup())
+	add_child(_popup_backdrop)
+
+	# Card panel
+	var card = PanelContainer.new()
+	card.z_index = 10
+	card.custom_minimum_size = Vector2(340, 0)
+	var card_style = StyleBoxFlat.new()
+	card_style.bg_color = Color(0.09, 0.11, 0.17)
+	card_style.corner_radius_top_left    = 8
+	card_style.corner_radius_top_right   = 8
+	card_style.corner_radius_bottom_left = 8
+	card_style.corner_radius_bottom_right = 8
+	card_style.content_margin_top    = 0.0
+	card_style.content_margin_bottom = 0.0
+	card_style.content_margin_left   = 0.0
+	card_style.content_margin_right  = 0.0
+	card.add_theme_stylebox_override("panel", card_style)
+	# Centre the card
+	card.anchor_left   = 0.5;  card.anchor_right  = 0.5
+	card.anchor_top    = 0.5;  card.anchor_bottom = 0.5
+	card.offset_left   = -170; card.offset_right  = 170
+	card.offset_top    = -20;  card.offset_bottom = -20
+	card.grow_vertical = Control.GROW_DIRECTION_BOTH
+	add_child(card)
+	_popup = card
+
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 0)
+	card.add_child(vbox)
+
+	# Header strip — green if available, red if in use
+	var avail: bool = room_data.get("available", true)
+	var hdr_bg = PanelContainer.new()
+	var hbs = StyleBoxFlat.new()
+	hbs.bg_color = Color(0.10, 0.36, 0.14) if avail else Color(0.38, 0.10, 0.10)
+	hbs.corner_radius_top_left  = 8
+	hbs.corner_radius_top_right = 8
+	hbs.content_margin_top = 10.0; hbs.content_margin_bottom = 10.0
+	hbs.content_margin_left = 14.0; hbs.content_margin_right = 14.0
+	hdr_bg.add_theme_stylebox_override("panel", hbs)
+	vbox.add_child(hdr_bg)
+
+	var hdr_row = HBoxContainer.new()
+	hdr_bg.add_child(hdr_row)
+
+	var title_lbl = Label.new()
+	title_lbl.text = room_data.get("name", room_id)
+	title_lbl.add_theme_font_size_override("font_size", 18)
+	title_lbl.add_theme_color_override("font_color", Color.WHITE)
+	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hdr_row.add_child(title_lbl)
+
+	var close_btn = Button.new()
+	close_btn.text = "✕"
+	close_btn.flat = true
+	close_btn.add_theme_color_override("font_color", Color.WHITE)
+	close_btn.pressed.connect(_close_popup)
+	hdr_row.add_child(close_btn)
+
+	# Body with margin
+	var body = VBoxContainer.new()
+	body.add_theme_constant_override("separation", 5)
+	var body_margin = MarginContainer.new()
+	body_margin.add_theme_constant_override("margin_left",   14)
+	body_margin.add_theme_constant_override("margin_right",  14)
+	body_margin.add_theme_constant_override("margin_top",    10)
+	body_margin.add_theme_constant_override("margin_bottom", 14)
+	body_margin.add_child(body)
+	vbox.add_child(body_margin)
+
+	# Status row
+	var status_row = HBoxContainer.new()
+	status_row.add_theme_constant_override("separation", 8)
+	body.add_child(status_row)
+
+	var sdot = ColorRect.new()
+	sdot.custom_minimum_size = Vector2(11, 11)
+	sdot.color = Color(0.2, 0.9, 0.2) if avail else Color(0.9, 0.2, 0.2)
+	status_row.add_child(sdot)
+
+	var status_lbl = Label.new()
+	status_lbl.text = ("● Available" if avail else "● In Use") + \
+		"   ·   Capacity: %d" % room_data.get("capacity", 0)
+	status_lbl.add_theme_color_override("font_color",
+		Color(0.55, 1.0, 0.55) if avail else Color(1.0, 0.55, 0.55))
+	status_lbl.add_theme_font_size_override("font_size", 12)
+	status_row.add_child(status_lbl)
+
+	body.add_child(HSeparator.new())
+
+	var sched_hdr = Label.new()
+	sched_hdr.text = "Today's Schedule"
+	sched_hdr.add_theme_font_size_override("font_size", 13)
+	sched_hdr.add_theme_color_override("font_color", Color(0.80, 0.82, 0.90))
+	body.add_child(sched_hdr)
+
+	var meetings: Array = room_data.get("meetings_today", [])
+	if meetings.is_empty():
+		var no_mtg = Label.new()
+		no_mtg.text = "  No meetings scheduled today"
+		no_mtg.add_theme_color_override("font_color", Color(0.45, 0.45, 0.45))
+		no_mtg.add_theme_font_size_override("font_size", 12)
+		body.add_child(no_mtg)
+	else:
+		for mtg in meetings:
+			var mrow = HBoxContainer.new()
+			mrow.add_theme_constant_override("separation", 8)
+
+			var time_lbl = Label.new()
+			time_lbl.text = mtg.get("time", "")
+			time_lbl.custom_minimum_size = Vector2(115, 0)
+			time_lbl.add_theme_color_override("font_color", Color(0.65, 0.72, 0.95))
+			time_lbl.add_theme_font_size_override("font_size", 12)
+			mrow.add_child(time_lbl)
+
+			var mtitle = Label.new()
+			mtitle.text = mtg.get("title", "")
+			mtitle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			mtitle.add_theme_color_override("font_color", Color(0.88, 0.88, 0.88))
+			mtitle.add_theme_font_size_override("font_size", 12)
+			mtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			mrow.add_child(mtitle)
+
+			body.add_child(mrow)
+
+	body.add_child(HSeparator.new())
+
+	# Navigate button
+	var nav_btn = Button.new()
+	nav_btn.text = "Navigate Here  →"
+	nav_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	nav_btn.add_theme_font_size_override("font_size", 14)
+	nav_btn.pressed.connect(_on_popup_navigate_pressed)
+	body.add_child(nav_btn)
+
+func _close_popup() -> void:
+	if _popup_backdrop:
+		_popup_backdrop.queue_free()
+		_popup_backdrop = null
+	if _popup:
+		_popup.queue_free()
+		_popup = null
+	_popup_room_id = ""
+
+func _on_popup_navigate_pressed() -> void:
+	var rid = _popup_room_id
+	_close_popup()
+	navigate_requested.emit(rid)
+
+# ── Direction helpers ─────────────────────────────────────────────────────────
+
+func _build_directions_bbcode(points: Array) -> String:
+	if points.size() < 2:
+		return "[i]No route found.[/i]"
+	var lines: Array[String] = []
+	for i in range(points.size() - 1):
+		var a: Vector3 = points[i]
+		var b: Vector3 = points[i + 1]
+		var dir  = b - a
+		var dist = dir.length()
+		lines.append("%d. Head %s  (%.1f m)" % [i + 1, _heading_name(dir), dist])
+	lines.append("%d. Arrived ✓" % points.size())
+	return "\n".join(lines)
+
+func _heading_name(dir: Vector3) -> String:
+	var angle = atan2(dir.x, dir.z) * 180.0 / PI
+	if   angle >=  157.5 or angle < -157.5: return "north"
+	elif angle >=  112.5:                   return "northeast"
+	elif angle >=   67.5:                   return "east"
+	elif angle >=   22.5:                   return "southeast"
+	elif angle >=  -22.5:                   return "south"
+	elif angle >=  -67.5:                   return "southwest"
+	elif angle >= -112.5:                   return "west"
+	else:                                   return "northwest"
+
+# ── Button callbacks ──────────────────────────────────────────────────────────
+
+func _on_info_pressed(room_id: String) -> void:
+	room_info_requested.emit(room_id)
+
+func _on_go_pressed(room_id: String) -> void:
+	navigate_requested.emit(room_id)
+
+func _on_clear_pressed() -> void:
+	clear_route()
+	navigation_cleared.emit()

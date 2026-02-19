@@ -1,31 +1,34 @@
 # room_manager.gd
 extends Node
 
-# Stub API base; later replace with real backend endpoint that uses Microsoft Graph
-var API_BASE := "http://192.168.1.100:8000" # replace with your mock server IP during dev
+signal rooms_updated(data: Dictionary)
+
+# ── Backend URL ──────────────────────────────────────────────────────────────
+# Desktop / emulator : 127.0.0.1 works fine.
+# Physical Android   : change to your laptop's LAN IP, e.g. "http://192.168.1.42:8000"
+#                      (phone and laptop must be on the same Wi-Fi network)
+var API_BASE := "http://127.0.0.1:8000"
 @onready var http: HTTPRequest = HTTPRequest.new()
 
 func _ready():
 	add_child(http)
-	http.connect("request_completed", Callable(self, "_on_request_completed"))
+	http.request_completed.connect(_on_request_completed)
 
 func fetch_rooms():
 	var url = "%s/rooms" % API_BASE
-	http.request(url, [], false, HTTPClient.METHOD_GET)
+	var err = http.request(url)
+	if err != OK:
+		push_warning("HTTP request failed to start: %d" % err)
 
-# generic fetch for one room if needed
-func fetch_room(room_id: String):
-	var url = "%s/rooms/%s" % [API_BASE, room_id]
-	http.request(url, [], false, HTTPClient.METHOD_GET)
-
-func _on_request_completed(result, response_code, headers, body):
+func _on_request_completed(result, response_code, _headers, body):
+	if result != HTTPRequest.RESULT_SUCCESS:
+		push_warning("HTTP request failed (result=%d)" % result)
+		return
 	if response_code == 200:
-		var json = JSON.parse(body.get_string_from_utf8())
-		if json.error == OK:
-			var data = json.result
-			# Broadcast to building loader to update overlays
-			get_tree().call_group("building", "update_room_overlays", data)
+		var data = JSON.parse_string(body.get_string_from_utf8())
+		if data != null:
+			rooms_updated.emit(data)
 		else:
-			push_warning("Failed parse JSON")
+			push_warning("Failed to parse rooms JSON")
 	else:
 		push_warning("HTTP error: %d" % response_code)

@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://baqrq78q1hl60" path="res://scenes/ui.gd" id="1_dj8aq"]
 
-[node name="Ui" type="Control" unique_id=205720764]
+[node name="Ui" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

@@ -1,19 +1,35 @@
 [gd_scene format=3 uid="uid://beqydhgji6str"]
 
-[ext_resource type="PackedScene" uid="uid://b57hwb3r76ppn" path="res://scenes/Building.tscn" id="1_rvslj"]
-[ext_resource type="PackedScene" uid="uid://bh3vhq7uxpufm" path="res://scenes/UI.tscn" id="2_0bbpv"]
+[ext_resource type="Script" uid="uid://bg5p5hav7bdqx" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" uid="uid://dbb1wqt7gaae5" path="res://scripts/navigator.gd" id="2_nav"]
+[ext_resource type="Script" uid="uid://dnkalpco3j1w8" path="res://scripts/room_manager.gd" id="3_rm"]
+[ext_resource type="PackedScene" uid="uid://b57hwb3r76ppn" path="res://scenes/Building.tscn" id="4_bld"]
+[ext_resource type="PackedScene" uid="uid://bh3vhq7uxpufm" path="res://scenes/UI.tscn" id="5_ui"]
+[ext_resource type="Script" path="res://scripts/camera_controller.gd" id="6_cam"]
 
-[node name="Main" type="Node3D" unique_id=969123151]
+[node name="Main" type="Node3D"]
+script = ExtResource("1_main")
 
-[node name="Camera3D" type="Camera3D" parent="." unique_id=435535344]
-transform = Transform3D(1, 0, 0, 0, -4.371139e-08, 1, 0, -1, -4.371139e-08, 0, 6, 10)
+[node name="Camera3D" type="Camera3D" parent="."]
+position = Vector3(13, 24, 22)
+rotation = Vector3(-0.830, 0, 0)
+script = ExtResource("6_cam")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1329604801]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-0.785, 0.524, 0)
+light_energy = 1.2
+shadow_enabled = true
 
-[node name="Building" parent="." unique_id=1352195737 instance=ExtResource("1_rvslj")]
+[node name="Building" parent="." instance=ExtResource("4_bld")]
 
-[node name="NavigationLink3D" type="NavigationLink3D" parent="." unique_id=906852801]
+[node name="Navigator" type="Node" parent="."]
+script = ExtResource("2_nav")
 
-[node name="Node" type="Node" parent="." unique_id=859165324]
+[node name="RoomManager" type="Node" parent="."]
+script = ExtResource("3_rm")
 
-[node name="Ui" parent="." unique_id=205720764 instance=ExtResource("2_0bbpv")]
+[node name="PathDisplay" type="Node3D" parent="."]
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="Ui" parent="CanvasLayer" instance=ExtResource("5_ui")]
