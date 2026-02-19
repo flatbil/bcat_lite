@@ -9,8 +9,9 @@ extends Node3D
 @onready var player:       Node3D  = $Player
 
 # Last rooms payload from backend (includes meetings_today per room)
-var _rooms_data:   Dictionary = {}
-var _current_dest: String     = ""
+var _rooms_data:     Dictionary = {}
+var _current_dest:   String     = ""
+var _last_route_pos: Vector3    = Vector3(1e9, 1e9, 1e9)
 
 func _ready() -> void:
 	get_viewport().physics_object_picking = true
@@ -21,10 +22,18 @@ func _ready() -> void:
 	ui.navigation_cleared.connect(_clear_route)
 	ui.room_info_requested.connect(_on_room_info_requested)
 	ui.joy_input.connect(func(d: Vector2) -> void: player.joy_dir = d)
-	player.moved.connect(_on_player_moved)
 
 	ui.set_room_data(building.get_room_data())
 	room_manager.fetch_rooms()
+
+func _process(_delta: float) -> void:
+	if _current_dest.is_empty() or not is_instance_valid(player):
+		return
+	if player.position.distance_to(_last_route_pos) > 2.0:
+		_last_route_pos = player.position
+		var pts = navigator.route_to_room(player.global_position, _current_dest)
+		_draw_path(pts)
+		ui.show_navigation(_current_dest, pts)
 
 func _on_rooms_updated(data: Dictionary) -> void:
 	_rooms_data = data
@@ -43,19 +52,12 @@ func _on_room_info_requested(room_id: String) -> void:
 
 # "Go" button or popup "Navigate Here" → route from player's current position
 func _navigate_to(room_id: String) -> void:
-	_current_dest = room_id
+	_current_dest    = room_id
+	_last_route_pos  = player.global_position
 	var pts = navigator.route_to_room(player.global_position, room_id)
 	_draw_path(pts)
 	building.select_room(room_id)
 	ui.show_navigation(room_id, pts)
-
-# Player moved → re-route to active destination
-func _on_player_moved(pos: Vector3) -> void:
-	if _current_dest.is_empty():
-		return
-	var pts = navigator.route_to_room(pos, _current_dest)
-	_draw_path(pts)
-	ui.show_navigation(_current_dest, pts)
 
 func _draw_path(points: Array) -> void:
 	# Clear previous geometry only (do NOT reset _current_dest here)
@@ -102,7 +104,8 @@ func _draw_path(points: Array) -> void:
 
 # Called when user clicks "✕ Clear Route"
 func _clear_route() -> void:
-	_current_dest = ""
+	_current_dest   = ""
+	_last_route_pos = Vector3(1e9, 1e9, 1e9)
 	for child in path_display.get_children():
 		child.queue_free()
 	building.clear_selection()

@@ -44,7 +44,7 @@ func _build_left_panel() -> void:
 	panel.add_child(vbox)
 
 	var header = Label.new()
-	header.text = "Conference Rooms"
+	header.text = "Rooms & Spaces"
 	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var hs = StyleBoxFlat.new()
 	hs.bg_color = Color(0.11, 0.20, 0.40)
