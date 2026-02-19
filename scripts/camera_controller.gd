@@ -78,7 +78,7 @@ func _handle_touch_gesture() -> void:
 	if count == 1:
 		# ── Single-finger pan ─────────────────────────────────────────────────
 		var idx: int = keys[0]
-		var delta := _touches[idx] - _prev_touches.get(idx, _touches[idx])
+		var delta: Vector2 = _touches[idx] - _prev_touches.get(idx, _touches[idx])
 		_pan_delta(delta)
 
 	else:
