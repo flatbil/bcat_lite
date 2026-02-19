@@ -120,7 +120,7 @@ func _build_entrance_marker() -> void:
 	add_child(mi)
 
 	var lbl = Label3D.new()
-	lbl.text       = "YOU ARE HERE"
+	lbl.text       = "ENTRANCE"
 	lbl.position   = Vector3(0, 0.7, 0)
 	lbl.pixel_size = 0.009
 	lbl.billboard  = BaseMaterial3D.BILLBOARD_ENABLED

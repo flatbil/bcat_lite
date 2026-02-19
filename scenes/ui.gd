@@ -4,6 +4,7 @@ extends Control
 signal navigate_requested(room_id: String)
 signal navigation_cleared
 signal room_info_requested(room_id: String)
+signal joy_input(dir: Vector2)
 
 var _room_data:      Array        = []
 var _status_dots:    Dictionary   = {}   # room_id -> ColorRect
@@ -15,10 +16,20 @@ var _popup:          Control      = null
 var _popup_backdrop: ColorRect    = null
 var _popup_room_id:  String       = ""
 
+# ── Joystick state ────────────────────────────────────────────────────────────
+var _joy_panel:  Control = null
+var _joy_thumb:  Control = null
+var _joy_active: bool    = false
+var _joy_finger: int     = -1   # active touch index (-1 = none, -2 = mouse)
+const _JOY_R    := 50.0         # max thumb travel from centre
+const _JOY_DEAD := 5.0          # dead-zone radius
+const _JOY_TR   := 20.0         # thumb half-size (thumb = 40 × 40 px)
+
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_left_panel()
 	_build_nav_panel()
+	_build_joystick()
 
 # ── Left panel ────────────────────────────────────────────────────────────────
 
@@ -372,3 +383,107 @@ func _on_go_pressed(room_id: String) -> void:
 func _on_clear_pressed() -> void:
 	clear_route()
 	navigation_cleared.emit()
+
+# ── Virtual joystick ──────────────────────────────────────────────────────────
+
+func _build_joystick() -> void:
+	# Outer base — 110 × 110 px, positioned bottom-right clear of the nav panel
+	var base = Control.new()
+	base.name = "JoyBase"
+	base.anchor_left   = 1.0;  base.anchor_right  = 1.0
+	base.anchor_top    = 1.0;  base.anchor_bottom = 1.0
+	base.offset_left   = -390; base.offset_right  = -280
+	base.offset_top    = -130; base.offset_bottom = -20
+	base.mouse_filter  = Control.MOUSE_FILTER_STOP
+	_joy_panel = base
+	add_child(base)
+
+	# Outer ring (circle illusion via fully-rounded StyleBox)
+	var ring = PanelContainer.new()
+	ring.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	ring.mouse_filter = Control.MOUSE_FILTER_PASS
+	var rs = StyleBoxFlat.new()
+	rs.bg_color = Color(0.15, 0.15, 0.15, 0.55)
+	rs.corner_radius_top_left    = 55
+	rs.corner_radius_top_right   = 55
+	rs.corner_radius_bottom_left = 55
+	rs.corner_radius_bottom_right = 55
+	ring.add_theme_stylebox_override("panel", rs)
+	base.add_child(ring)
+
+	# "MOVE" hint label inside the ring
+	var hint = Label.new()
+	hint.text = "MOVE"
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.vertical_alignment   = VERTICAL_ALIGNMENT_BOTTOM
+	hint.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	hint.offset_bottom = -6
+	hint.add_theme_font_size_override("font_size", 9)
+	hint.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7, 0.7))
+	hint.mouse_filter = Control.MOUSE_FILTER_PASS
+	base.add_child(hint)
+
+	# Thumb circle
+	var thumb = PanelContainer.new()
+	thumb.custom_minimum_size = Vector2(_JOY_TR * 2, _JOY_TR * 2)
+	thumb.mouse_filter = Control.MOUSE_FILTER_PASS
+	var ts = StyleBoxFlat.new()
+	ts.bg_color = Color(0.85, 0.85, 0.85, 0.85)
+	ts.corner_radius_top_left    = int(_JOY_TR)
+	ts.corner_radius_top_right   = int(_JOY_TR)
+	ts.corner_radius_bottom_left = int(_JOY_TR)
+	ts.corner_radius_bottom_right = int(_JOY_TR)
+	thumb.add_theme_stylebox_override("panel", ts)
+	_joy_thumb = thumb
+	base.add_child(thumb)
+
+	_reset_joy()
+	base.gui_input.connect(_on_joy_gui_input)
+
+# Handle mouse events (desktop + emulated touch on desktop)
+func _on_joy_gui_input(event: InputEvent) -> void:
+	var center := Vector2(55.0, 55.0)
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed and _joy_finger == -1:
+			_joy_finger = -2   # mouse sentinel
+			_joy_active = true
+			_update_joy(event.position - center)
+		elif not event.pressed and _joy_finger == -2:
+			_joy_finger = -1
+			_joy_active = false
+			_reset_joy()
+	elif event is InputEventMouseMotion and _joy_active and _joy_finger == -2:
+		_update_joy(event.position - center)
+
+# Handle real screen-touch events (Android)
+func _input(event: InputEvent) -> void:
+	if _joy_panel == null:
+		return
+	var rect   := _joy_panel.get_global_rect()
+	var center := rect.position + Vector2(55.0, 55.0)
+	if event is InputEventScreenTouch:
+		if event.pressed and _joy_finger == -1 and rect.has_point(event.position):
+			_joy_finger = event.index
+			_joy_active = true
+			_update_joy(event.position - center)
+			get_viewport().set_input_as_handled()
+		elif not event.pressed and event.index == _joy_finger:
+			_joy_finger = -1
+			_joy_active = false
+			_reset_joy()
+			get_viewport().set_input_as_handled()
+	elif event is InputEventScreenDrag and event.index == _joy_finger:
+		_update_joy(event.position - center)
+		get_viewport().set_input_as_handled()
+
+func _update_joy(delta: Vector2) -> void:
+	var clamped := delta.limit_length(_JOY_R - _JOY_TR)
+	var c55     := Vector2(55.0, 55.0)
+	_joy_thumb.position = c55 + clamped - Vector2(_JOY_TR, _JOY_TR)
+	var dir := clamped / (_JOY_R - _JOY_TR) if clamped.length() > _JOY_DEAD else Vector2.ZERO
+	joy_input.emit(dir)
+
+func _reset_joy() -> void:
+	if _joy_thumb:
+		_joy_thumb.position = Vector2(55.0 - _JOY_TR, 55.0 - _JOY_TR)
+	joy_input.emit(Vector2.ZERO)

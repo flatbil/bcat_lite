@@ -6,6 +6,7 @@
 [ext_resource type="PackedScene" uid="uid://b57hwb3r76ppn" path="res://scenes/Building.tscn" id="4_bld"]
 [ext_resource type="PackedScene" uid="uid://bh3vhq7uxpufm" path="res://scenes/UI.tscn" id="5_ui"]
 [ext_resource type="Script" path="res://scripts/camera_controller.gd" id="6_cam"]
+[ext_resource type="Script" path="res://scripts/player.gd" id="7_player"]
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
@@ -29,6 +30,10 @@ script = ExtResource("2_nav")
 script = ExtResource("3_rm")
 
 [node name="PathDisplay" type="Node3D" parent="."]
+
+[node name="Player" type="Node3D" parent="."]
+position = Vector3(0, 0, 0)
+script = ExtResource("7_player")
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
 

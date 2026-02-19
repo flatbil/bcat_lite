@@ -1,16 +1,16 @@
 # main.gd
 extends Node3D
 
-const START_POS = Vector3(0.0, 0.0, 0.0)
-
-@onready var building:      Node3D  = $Building
-@onready var navigator:     Node    = $Navigator
-@onready var room_manager:  Node    = $RoomManager
-@onready var path_display:  Node3D  = $PathDisplay
-@onready var ui:            Control = $CanvasLayer/Ui
+@onready var building:     Node3D  = $Building
+@onready var navigator:    Node    = $Navigator
+@onready var room_manager: Node    = $RoomManager
+@onready var path_display: Node3D  = $PathDisplay
+@onready var ui:           Control = $CanvasLayer/Ui
+@onready var player:       Node3D  = $Player
 
 # Last rooms payload from backend (includes meetings_today per room)
-var _rooms_data: Dictionary = {}
+var _rooms_data:   Dictionary = {}
+var _current_dest: String     = ""
 
 func _ready() -> void:
 	get_viewport().physics_object_picking = true
@@ -18,8 +18,11 @@ func _ready() -> void:
 	building.room_clicked.connect(_on_room_info_requested)
 	room_manager.rooms_updated.connect(_on_rooms_updated)
 	ui.navigate_requested.connect(_navigate_to)
-	ui.navigation_cleared.connect(_clear_path)
+	ui.navigation_cleared.connect(_clear_route)
 	ui.room_info_requested.connect(_on_room_info_requested)
+	ui.joy_input.connect(func(d: Vector2) -> void: player.joy_dir = d)
+	player.moved.connect(_on_player_moved)
+
 	ui.set_room_data(building.get_room_data())
 	room_manager.fetch_rooms()
 
@@ -38,15 +41,26 @@ func _on_room_info_requested(room_id: String) -> void:
 				break
 	ui.show_room_popup(room_id, data)
 
-# Left-panel "Go" or popup "Navigate Here" → draw path
+# "Go" button or popup "Navigate Here" → route from player's current position
 func _navigate_to(room_id: String) -> void:
-	var pts = navigator.route_to_room(START_POS, room_id)
+	_current_dest = room_id
+	var pts = navigator.route_to_room(player.global_position, room_id)
 	_draw_path(pts)
 	building.select_room(room_id)
 	ui.show_navigation(room_id, pts)
 
+# Player moved → re-route to active destination
+func _on_player_moved(pos: Vector3) -> void:
+	if _current_dest.is_empty():
+		return
+	var pts = navigator.route_to_room(pos, _current_dest)
+	_draw_path(pts)
+	ui.show_navigation(_current_dest, pts)
+
 func _draw_path(points: Array) -> void:
-	_clear_path()
+	# Clear previous geometry only (do NOT reset _current_dest here)
+	for child in path_display.get_children():
+		child.queue_free()
 	if points.size() < 2:
 		return
 	for i in range(points.size() - 1):
@@ -62,9 +76,9 @@ func _draw_path(points: Array) -> void:
 		box.size = Vector3(0.45, 0.22, length)
 		seg.mesh = box
 		var mat = StandardMaterial3D.new()
-		mat.albedo_color             = Color(1.0, 0.88, 0.0)
-		mat.emission_enabled         = true
-		mat.emission                 = Color(0.9, 0.65, 0.0)
+		mat.albedo_color               = Color(1.0, 0.88, 0.0)
+		mat.emission_enabled           = true
+		mat.emission                   = Color(0.9, 0.65, 0.0)
 		mat.emission_energy_multiplier = 1.8
 		seg.material_override = mat
 		seg.position  = Vector3(mid.x, 0.14, mid.z)
@@ -78,15 +92,17 @@ func _draw_path(points: Array) -> void:
 		sphere.height = 0.56
 		dot.mesh = sphere
 		var mat = StandardMaterial3D.new()
-		mat.albedo_color             = Color(1.0, 0.45, 0.0)
-		mat.emission_enabled         = true
-		mat.emission                 = Color(0.8, 0.25, 0.0)
+		mat.albedo_color               = Color(1.0, 0.45, 0.0)
+		mat.emission_enabled           = true
+		mat.emission                   = Color(0.8, 0.25, 0.0)
 		mat.emission_energy_multiplier = 1.8
 		dot.material_override = mat
 		dot.position = Vector3(pt.x, 0.28, pt.z)
 		path_display.add_child(dot)
 
-func _clear_path() -> void:
+# Called when user clicks "✕ Clear Route"
+func _clear_route() -> void:
+	_current_dest = ""
 	for child in path_display.get_children():
 		child.queue_free()
 	building.clear_selection()
