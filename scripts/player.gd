@@ -6,7 +6,7 @@ extends Node3D
 
 signal moved(pos: Vector3)
 
-const SPEED := 5.0   # metres per second
+const SPEED := 15.0  # metres per second (factory is ~160 m wide)
 
 var joy_dir   := Vector2.ZERO   # fed by UI joystick each frame
 var _last_emit := Vector3.ZERO
@@ -60,6 +60,6 @@ func _process(delta: float) -> void:
 	position.y = 0.0   # stay on floor
 
 	# Emit only when moved enough to justify a re-route
-	if position.distance_to(_last_emit) > 0.5:
+	if position.distance_to(_last_emit) > 2.0:
 		_last_emit = position
 		moved.emit(position)

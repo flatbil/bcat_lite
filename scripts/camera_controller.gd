@@ -5,8 +5,8 @@
 # Attach to the Camera3D node in Main.tscn.
 extends Camera3D
 
-const MIN_HEIGHT   := 3.0    # closest zoom (metres above floor)
-const MAX_HEIGHT   := 60.0   # farthest zoom
+const MIN_HEIGHT   := 5.0    # closest zoom (metres above floor)
+const MAX_HEIGHT   := 150.0  # farthest zoom (factory is 160 m wide)
 const ZOOM_STEP    := 1.18   # multiplier per scroll tick (desktop)
 const PAN_SENS     := 0.002  # metres per pixel per metre of camera height
 

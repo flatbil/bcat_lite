@@ -1,37 +1,58 @@
-# building_loader.gd — procedural building, no GLB required
+# building_loader.gd — Boeing Everett Factory (simplified schematic)
+# Real building: ~160 m wide × ~100 m deep, 4 parallel production bays (N–S).
+# Layout (X 0→160, Z –50→50):
+#   Bay 747  X=5–35   | Bay 767  X=46–74  | Bay 777  X=86–114 | Bay 777X X=125–155
+#   North support corridor  Z=–38–(–50)
+#   South support corridor  Z=38–50  (includes entrance plaza at Z=42–50)
+#   Inter-bay N–S corridors at X=40, 80, 120
 extends Node3D
 
 signal room_clicked(room_id: String)
 
-# Building: 28 m wide (X 0→28), 22 m deep (Z -11 to 11)
-# Three E-W corridors connected by three N-S cross-corridors.
 var ROOMS = [
-	# ── North wing (behind north hall at Z = -5) ───────────────────────────
-	{"id":"boardroom","name":"Boardroom",  "capacity":20,"pos":Vector3(6,  0,-9.5),"size":Vector3(8,2.8,5)},
-	{"id":"conf_a",   "name":"Conf A",    "capacity":12,"pos":Vector3(14, 0,-9.5),"size":Vector3(5,2.4,4)},
-	{"id":"conf_b",   "name":"Conf B",    "capacity":10,"pos":Vector3(21, 0,-9.5),"size":Vector3(5,2.4,4)},
-	# ── South wing (behind south hall at Z = 5) ────────────────────────────
-	{"id":"conf_c",   "name":"Conf C",    "capacity":10,"pos":Vector3(6,  0, 9.5),"size":Vector3(5,2.4,4)},
-	{"id":"conf_d",   "name":"Conf D",    "capacity":12,"pos":Vector3(14, 0, 9.5),"size":Vector3(5,2.4,4)},
-	{"id":"conf_e",   "name":"Conf E",    "capacity":10,"pos":Vector3(21, 0, 9.5),"size":Vector3(5,2.4,4)},
-	# ── Focus rooms off main corridor ──────────────────────────────────────
-	{"id":"focus_a",  "name":"Focus A",   "capacity": 4,"pos":Vector3(6,  0,-2.5),"size":Vector3(3,2.4,3)},
-	{"id":"focus_b",  "name":"Focus B",   "capacity": 4,"pos":Vector3(19, 0,-2.5),"size":Vector3(3,2.4,3)},
-	{"id":"focus_c",  "name":"Focus C",   "capacity": 4,"pos":Vector3(6,  0, 2.5),"size":Vector3(3,2.4,3)},
-	{"id":"focus_d",  "name":"Focus D",   "capacity": 4,"pos":Vector3(19, 0, 2.5),"size":Vector3(3,2.4,3)},
-	# ── East alcove rooms ─────────────────────────────────────────────────
-	{"id":"east_a",   "name":"East Mtg A","capacity": 6,"pos":Vector3(26, 0,-3),  "size":Vector3(4,2.4,4)},
-	{"id":"east_b",   "name":"East Mtg B","capacity": 6,"pos":Vector3(26, 0, 3),  "size":Vector3(4,2.4,4)},
+	# ── Production bays (run N–S, tall ceilings) ─────────────────────────────
+	{"id":"bay_747",    "name":"747 Bay (Legacy)",    "capacity":200,
+	 "pos":Vector3( 20, 0, 0),   "size":Vector3(30, 12, 70)},
+	{"id":"bay_767",    "name":"767 Bay (Tanker)",    "capacity":150,
+	 "pos":Vector3( 60, 0, 0),   "size":Vector3(28, 11, 70)},
+	{"id":"bay_777",    "name":"777 Bay (Freighter)", "capacity":150,
+	 "pos":Vector3(100, 0, 0),   "size":Vector3(28, 11, 70)},
+	{"id":"bay_777x",   "name":"777X Bay (WSD)",      "capacity":200,
+	 "pos":Vector3(140, 0, 0),   "size":Vector3(30, 12, 70)},
+	# ── North support wing ────────────────────────────────────────────────────
+	{"id":"visitor_ctr","name":"Visitor Center",      "capacity": 50,
+	 "pos":Vector3(  8, 0,-46),  "size":Vector3(14,  5,  8)},
+	{"id":"safety_ofc", "name":"Safety & Training",   "capacity": 30,
+	 "pos":Vector3( 35, 0,-46),  "size":Vector3(12,  5,  8)},
+	{"id":"north_cafe", "name":"North Cafeteria",     "capacity": 80,
+	 "pos":Vector3( 80, 0,-46),  "size":Vector3(24,  5,  8)},
+	{"id":"quality_ctl","name":"Quality Control",     "capacity": 25,
+	 "pos":Vector3(130, 0,-46),  "size":Vector3(16,  5,  8)},
+	{"id":"delivery",   "name":"Delivery Center",     "capacity": 30,
+	 "pos":Vector3(153, 0,-46),  "size":Vector3(12,  5,  8)},
+	# ── South support wing ────────────────────────────────────────────────────
+	{"id":"tool_crib",  "name":"Tool Crib",           "capacity": 20,
+	 "pos":Vector3(  8, 0, 46),  "size":Vector3(14,  5,  8)},
+	{"id":"engineering","name":"Engineering Office",  "capacity": 60,
+	 "pos":Vector3( 42, 0, 46),  "size":Vector3(18,  5,  8)},
+	{"id":"south_cafe", "name":"South Cafeteria",     "capacity": 80,
+	 "pos":Vector3( 80, 0, 46),  "size":Vector3(24,  5,  8)},
+	{"id":"final_asm",  "name":"Final Assembly Ctrl", "capacity":100,
+	 "pos":Vector3(115, 0, 46),  "size":Vector3(18,  5,  8)},
+	{"id":"conf_777x",  "name":"777X Design Conf",    "capacity": 20,
+	 "pos":Vector3(148, 0, 46),  "size":Vector3(12,  5,  8)},
+	{"id":"med_center", "name":"Medical Center",      "capacity": 15,
+	 "pos":Vector3(155, 0, 10),  "size":Vector3( 8,  5, 12)},
 ]
 
-const DEFAULT_SIZE    = Vector3(4.0, 2.4, 3.0)
+const DEFAULT_SIZE    = Vector3(4.0, 4.0, 4.0)
 const COLOR_AVAILABLE = Color(0.22, 0.78, 0.22)
 const COLOR_OCCUPIED  = Color(0.80, 0.20, 0.20)
 const COLOR_SELECTED  = Color(0.20, 0.42, 0.90)
 
-var _room_bodies: Dictionary = {}
-var _room_mats:   Dictionary = {}
-var _selected_id: String     = ""
+var _room_bodies:  Dictionary = {}
+var _room_mats:    Dictionary = {}
+var _selected_id:  String     = ""
 var _availability: Dictionary = {}
 
 func _ready() -> void:
@@ -39,23 +60,33 @@ func _ready() -> void:
 	_build_rooms()
 	_build_entrance_marker()
 
-# ── Structure ────────────────────────────────────────────────────────────────
+# ── Structure ─────────────────────────────────────────────────────────────────
 
 func _build_structure() -> void:
-	# Floor slab
-	_slab(Vector3(13, -0.1,  0), Vector3(28, 0.2, 22), Color(0.60, 0.58, 0.56))
-	# Main corridor  (Z = 0,  runs full width)
-	_slab(Vector3(13, 0.01,  0), Vector3(28, 0.02, 2.2), Color(0.82, 0.80, 0.72))
-	# North wing corridor (Z = -5, X 2→26)
-	_slab(Vector3(14, 0.01, -5), Vector3(24, 0.02, 2.2), Color(0.80, 0.78, 0.70))
-	# South wing corridor (Z = 5, X 2→26)
-	_slab(Vector3(14, 0.01,  5), Vector3(24, 0.02, 2.2), Color(0.80, 0.78, 0.70))
-	# West cross-connector  (X = 2,  Z -5→5)
-	_slab(Vector3(2,  0.01,  0), Vector3(2.2, 0.02, 10), Color(0.76, 0.74, 0.68))
-	# Mid  cross-connector  (X = 13, Z -5→5)
-	_slab(Vector3(13, 0.01,  0), Vector3(2.2, 0.02, 10), Color(0.76, 0.74, 0.68))
-	# East cross-connector  (X = 24, Z -5→5)
-	_slab(Vector3(24, 0.01,  0), Vector3(2.2, 0.02, 10), Color(0.76, 0.74, 0.68))
+	# Main floor slab
+	_slab(Vector3(80, -0.10,  0), Vector3(160, 0.20, 100), Color(0.52, 0.50, 0.48))
+
+	# North support corridor strip
+	_slab(Vector3(80,  0.01,-44), Vector3(160, 0.02,  12), Color(0.76, 0.74, 0.68))
+	# South support corridor + entrance plaza
+	_slab(Vector3(80,  0.01, 44), Vector3(160, 0.02,  12), Color(0.76, 0.74, 0.68))
+
+	# Inter-bay N–S corridors (between each pair of bays)
+	_slab(Vector3( 40, 0.01,  0), Vector3(6, 0.02, 70), Color(0.70, 0.68, 0.63))
+	_slab(Vector3( 80, 0.01,  0), Vector3(6, 0.02, 70), Color(0.70, 0.68, 0.63))
+	_slab(Vector3(120, 0.01,  0), Vector3(6, 0.02, 70), Color(0.70, 0.68, 0.63))
+
+	# West and east perimeter walkways
+	_slab(Vector3(  3, 0.01,  0), Vector3(4, 0.02, 70), Color(0.68, 0.66, 0.60))
+	_slab(Vector3(157, 0.01,  0), Vector3(4, 0.02, 70), Color(0.68, 0.66, 0.60))
+
+	# Bay door markings — yellow safety stripes at north openings of each bay
+	for bx: int in [20, 60, 100, 140]:
+		_slab(Vector3(bx, 0.015, -38), Vector3(22, 0.01, 5), Color(0.95, 0.85, 0.05))
+
+	# Center-building overhead crane rail markers (thin lines along bay axes)
+	for bx: int in [20, 60, 100, 140]:
+		_slab(Vector3(bx, 0.015, 0), Vector3(2, 0.01, 68), Color(0.35, 0.35, 0.40))
 
 func _slab(pos: Vector3, sz: Vector3, col: Color) -> void:
 	var mi  = MeshInstance3D.new()
@@ -72,9 +103,9 @@ func _slab(pos: Vector3, sz: Vector3, col: Color) -> void:
 
 func _build_rooms() -> void:
 	for rd in ROOMS:
-		var id:   String  = rd["id"]
-		var pos:  Vector3 = rd["pos"]
-		var sz:   Vector3 = rd.get("size", DEFAULT_SIZE)
+		var id:  String  = rd["id"]
+		var pos: Vector3 = rd["pos"]
+		var sz:  Vector3 = rd.get("size", DEFAULT_SIZE)
 
 		var body = StaticBody3D.new()
 		body.position = pos + Vector3(0, sz.y * 0.5, 0)
@@ -93,36 +124,40 @@ func _build_rooms() -> void:
 
 		var col = CollisionShape3D.new()
 		var shp = BoxShape3D.new()
-		shp.size   = sz
-		col.shape  = shp
+		shp.size  = sz
+		col.shape = shp
 		body.add_child(col)
 
 		var lbl = Label3D.new()
 		lbl.text       = "%s\n(cap %d)" % [rd["name"], rd["capacity"]]
 		lbl.position   = Vector3(0, sz.y * 0.65, 0)
-		lbl.pixel_size = 0.012
+		lbl.pixel_size = 0.014
 		lbl.billboard  = BaseMaterial3D.BILLBOARD_ENABLED
-		lbl.font_size  = 26
+		lbl.font_size  = 24
 		body.add_child(lbl)
 
 		body.input_event.connect(_on_room_input_event.bind(id))
 		_room_bodies[id] = body
 
 func _build_entrance_marker() -> void:
+	# Glowing floor disk at south entrance (player start)
 	var mi  = MeshInstance3D.new()
 	var cyl = CylinderMesh.new()
-	cyl.height = 0.06; cyl.top_radius = 0.5; cyl.bottom_radius = 0.5
-	mi.mesh   = cyl
-	var mat   = StandardMaterial3D.new()
-	mat.albedo_color = Color(0.0, 0.6, 1.0)
+	cyl.height = 0.06; cyl.top_radius = 1.5; cyl.bottom_radius = 1.5
+	mi.mesh = cyl
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color             = Color(0.0, 0.6, 1.0)
+	mat.emission_enabled         = true
+	mat.emission                 = Color(0.0, 0.3, 0.9)
+	mat.emission_energy_multiplier = 1.2
 	mi.material_override = mat
-	mi.position = Vector3(0, 0.03, 0)
+	mi.position = Vector3(80, 0.03, 50)
 	add_child(mi)
 
 	var lbl = Label3D.new()
 	lbl.text       = "ENTRANCE"
-	lbl.position   = Vector3(0, 0.7, 0)
-	lbl.pixel_size = 0.009
+	lbl.position   = Vector3(80, 2.0, 50)
+	lbl.pixel_size = 0.012
 	lbl.billboard  = BaseMaterial3D.BILLBOARD_ENABLED
 	lbl.modulate   = Color(0.0, 0.6, 1.0)
 	lbl.font_size  = 28

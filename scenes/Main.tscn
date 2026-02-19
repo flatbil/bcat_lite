@@ -12,11 +12,12 @@
 script = ExtResource("1_main")
 
 [node name="Camera3D" type="Camera3D" parent="."]
-position = Vector3(13, 24, 22)
-rotation = Vector3(-0.830, 0, 0)
+position = Vector3(80, 90, 75)
+rotation = Vector3(-0.852, 0, 0)
 script = ExtResource("6_cam")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+position = Vector3(80, 60, 0)
 rotation = Vector3(-0.785, 0.524, 0)
 light_energy = 1.2
 shadow_enabled = true
@@ -32,7 +33,7 @@ script = ExtResource("3_rm")
 [node name="PathDisplay" type="Node3D" parent="."]
 
 [node name="Player" type="Node3D" parent="."]
-position = Vector3(0, 0, 0)
+position = Vector3(80, 0, 50)
 script = ExtResource("7_player")
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
