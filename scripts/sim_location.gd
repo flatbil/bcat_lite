@@ -54,7 +54,7 @@ func _process(delta: float) -> void:
 	# Bleed GPS correction into position at a constant rate
 	var corr_len := _gps_correction.length()
 	if corr_len > 0.001:
-		var move := min(GPS_BLEND_SPEED * delta, corr_len)
+		var move: float = minf(GPS_BLEND_SPEED * delta, corr_len)
 		var dir   := _gps_correction.normalized()
 		_pos            += dir * move
 		_gps_correction -= dir * move
