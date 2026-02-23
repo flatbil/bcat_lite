@@ -2,14 +2,16 @@
 # Represents the operator walking through the building.
 # Keyboard : WASD / arrow keys  (world-axis; matches the top-down camera view)
 # Mobile   : joy_dir set each frame by the UI virtual joystick
+# sensor_mode: when true, WASD is suppressed (sensor drives position via main.gd)
 extends Node3D
 
 signal moved(pos: Vector3)
 
 const SPEED := 15.0  # metres per second (factory is ~160 m wide)
 
-var joy_dir   := Vector2.ZERO   # fed by UI joystick each frame
-var _last_emit := Vector3.ZERO
+var joy_dir     := Vector2.ZERO   # fed by UI joystick each frame
+var sensor_mode := false          # when true, skip WASD input
+var _last_emit  := Vector3.ZERO
 
 func _ready() -> void:
 	_build_visual()
@@ -44,11 +46,12 @@ func _build_visual() -> void:
 func _process(delta: float) -> void:
 	var dir := Vector3.ZERO
 
-	# Keyboard (WASD / arrow keys, world-axis)
-	dir.x += Input.get_axis("ui_left", "ui_right")
-	dir.z += Input.get_axis("ui_up",   "ui_down")
+	# Keyboard (WASD / arrow keys, world-axis) — disabled in sensor mode
+	if not sensor_mode:
+		dir.x += Input.get_axis("ui_left", "ui_right")
+		dir.z += Input.get_axis("ui_up",   "ui_down")
 
-	# Virtual joystick (joy_dir.y is negative when pushed up → move in -Z = north)
+	# Virtual joystick always active (joy_dir.y negative = -Z = north)
 	if joy_dir.length() > 0.05:
 		dir.x += joy_dir.x
 		dir.z += joy_dir.y

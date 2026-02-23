@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Wayfinding – GPS Companion</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0d1117; color: #c9d1d9; min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 16px; gap: 12px;
+  }
+  h1 { font-size: 1.2rem; color: #58a6ff; }
+  .card {
+    background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+    padding: 14px 16px; width: 100%; max-width: 420px;
+  }
+  .card h2 { font-size: 0.85rem; color: #8b949e; margin-bottom: 10px; text-transform: uppercase; letter-spacing: .05em; }
+  label { font-size: 0.8rem; color: #8b949e; display: block; margin-bottom: 3px; }
+  input[type="text"], input[type="number"] {
+    width: 100%; padding: 8px 10px; border-radius: 6px;
+    border: 1px solid #30363d; background: #0d1117; color: #c9d1d9;
+    font-size: 0.9rem; margin-bottom: 10px;
+  }
+  button {
+    width: 100%; padding: 12px; border-radius: 8px; border: none;
+    background: #238636; color: #fff; font-size: 1rem; font-weight: 600;
+    cursor: pointer; margin-top: 4px;
+  }
+  button:active { background: #2ea043; }
+  button.secondary { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; }
+  button.secondary:active { background: #30363d; }
+  .status-grid {
+    display: grid; grid-template-columns: auto 1fr; gap: 4px 12px;
+    font-size: 0.85rem; align-items: center;
+  }
+  .status-grid .key { color: #8b949e; }
+  .status-grid .val { color: #c9d1d9; font-family: monospace; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 12px;
+    font-size: 0.75rem; font-weight: 600;
+  }
+  .badge.ok  { background: #1a3a1a; color: #56d364; border: 1px solid #238636; }
+  .badge.err { background: #3a1a1a; color: #f85149; border: 1px solid #da3633; }
+  .badge.wait { background: #2a2a1a; color: #e3b341; border: 1px solid #9e6a03; }
+  #log {
+    font-size: 0.72rem; font-family: monospace; color: #8b949e;
+    max-height: 80px; overflow-y: auto; margin-top: 8px;
+    border-top: 1px solid #21262d; padding-top: 6px;
+  }
+</style>
+</head>
+<body>
+
+<h1>📍 Wayfinding GPS Companion</h1>
+
+<!-- Server config -->
+<div class="card">
+  <h2>Server</h2>
+  <label for="server-url">Server URL (LAN IP or localhost)</label>
+  <input type="text" id="server-url" value="http://localhost:8000" autocomplete="off" autocorrect="off" spellcheck="false">
+  <button class="secondary" onclick="saveServerUrl()">Save URL</button>
+</div>
+
+<!-- GPS status -->
+<div class="card">
+  <h2>GPS Status</h2>
+  <div class="status-grid">
+    <span class="key">State:</span>
+    <span class="val"><span class="badge wait" id="gps-state">waiting…</span></span>
+    <span class="key">Latitude:</span>
+    <span class="val" id="lat">—</span>
+    <span class="key">Longitude:</span>
+    <span class="val" id="lon">—</span>
+    <span class="key">Accuracy:</span>
+    <span class="val" id="acc">—</span>
+    <span class="key">Last POST:</span>
+    <span class="val" id="last-post">—</span>
+    <span class="key">Server:</span>
+    <span class="val"><span class="badge wait" id="server-state">—</span></span>
+  </div>
+  <div id="log"></div>
+</div>
+
+<!-- Anchor setup -->
+<div class="card">
+  <h2>Building Anchor</h2>
+  <p style="font-size:0.8rem;color:#8b949e;margin-bottom:10px;">
+    Stand at the building entrance, then tap <strong>Set as Building Anchor</strong>.
+    This maps your current GPS position to entrance coordinates (X=50, Z=44).
+  </p>
+  <label>Building entrance X</label>
+  <input type="number" id="anchor-bx" value="50" step="0.1">
+  <label>Building entrance Z</label>
+  <input type="number" id="anchor-bz" value="44" step="0.1">
+  <button onclick="setAnchor()">Set as Building Anchor</button>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let _serverUrl  = localStorage.getItem("gps_server") || "http://localhost:8000";
+let _watchId    = null;
+let _lastLat    = null, _lastLon = null, _lastAcc = null;
+let _postTimer  = null;
+const POST_INTERVAL_MS = 10000;   // post every 10 s at minimum
+const MIN_MOVE_M       = 3.0;     // also post on significant position change
+
+document.getElementById("server-url").value = _serverUrl;
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function log(msg) {
+  const el = document.getElementById("log");
+  const line = document.createElement("div");
+  line.textContent = new Date().toLocaleTimeString() + " " + msg;
+  el.prepend(line);
+  while (el.children.length > 12) el.removeChild(el.lastChild);
+}
+
+function setBadge(id, text, cls) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = "badge " + cls;
+}
+
+function haversineM(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// ── Server URL ─────────────────────────────────────────────────────────────
+function saveServerUrl() {
+  _serverUrl = document.getElementById("server-url").value.trim().replace(/\/$/, "");
+  localStorage.setItem("gps_server", _serverUrl);
+  log("Server URL saved: " + _serverUrl);
+}
+
+// ── GPS posting ────────────────────────────────────────────────────────────
+async function postGps(lat, lon, accuracy) {
+  try {
+    const res = await fetch(_serverUrl + "/location/gps", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({lat, lon, accuracy})
+    });
+    if (res.ok) {
+      document.getElementById("last-post").textContent = new Date().toLocaleTimeString();
+      setBadge("server-state", "ok", "ok");
+    } else {
+      setBadge("server-state", "HTTP " + res.status, "err");
+    }
+  } catch (e) {
+    setBadge("server-state", "unreachable", "err");
+    log("POST error: " + e.message);
+  }
+}
+
+function schedulePost(lat, lon, accuracy) {
+  clearTimeout(_postTimer);
+  postGps(lat, lon, accuracy);
+  _postTimer = setTimeout(() => schedulePost(lat, lon, accuracy), POST_INTERVAL_MS);
+}
+
+// ── Geolocation watch ──────────────────────────────────────────────────────
+function startWatch() {
+  if (!navigator.geolocation) {
+    setBadge("gps-state", "not supported", "err");
+    return;
+  }
+  setBadge("gps-state", "acquiring…", "wait");
+  _watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const {latitude: lat, longitude: lon, accuracy: acc} = pos.coords;
+
+      document.getElementById("lat").textContent = lat.toFixed(7);
+      document.getElementById("lon").textContent = lon.toFixed(7);
+      document.getElementById("acc").textContent = acc ? acc.toFixed(1) + " m" : "—";
+      setBadge("gps-state", "fix ✓", "ok");
+
+      // Post immediately on first fix or significant movement
+      const moved = (_lastLat !== null)
+        ? haversineM(_lastLat, _lastLon, lat, lon) > MIN_MOVE_M
+        : true;
+      if (moved) {
+        _lastLat = lat; _lastLon = lon; _lastAcc = acc;
+        schedulePost(lat, lon, acc);
+      }
+    },
+    (err) => {
+      setBadge("gps-state", "error " + err.code, "err");
+      log("GPS error: " + err.message);
+    },
+    {enableHighAccuracy: true, maximumAge: 5000, timeout: 15000}
+  );
+}
+
+// ── Anchor ─────────────────────────────────────────────────────────────────
+async function setAnchor() {
+  if (_lastLat === null) {
+    alert("No GPS fix yet. Wait for the GPS status to show 'fix ✓' first.");
+    return;
+  }
+  const bx = parseFloat(document.getElementById("anchor-bx").value);
+  const bz = parseFloat(document.getElementById("anchor-bz").value);
+  try {
+    const res = await fetch(_serverUrl + "/location/anchor", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({lat: _lastLat, lon: _lastLon, building_x: bx, building_z: bz})
+    });
+    if (res.ok) {
+      log("Anchor set: GPS(" + _lastLat.toFixed(5) + "," + _lastLon.toFixed(5) + ") → building(" + bx + "," + bz + ")");
+      setBadge("server-state", "anchor set", "ok");
+    } else {
+      log("Anchor POST failed: " + res.status);
+    }
+  } catch (e) {
+    log("Anchor error: " + e.message);
+  }
+}
+
+// ── Start ──────────────────────────────────────────────────────────────────
+startWatch();
+</script>
+</body>
+</html>

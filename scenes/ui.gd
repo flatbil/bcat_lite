@@ -5,6 +5,9 @@ signal navigate_requested(room_id: String)
 signal navigation_cleared
 signal room_info_requested(room_id: String)
 signal joy_input(dir: Vector2)
+signal sensor_mode_toggled(on: bool)
+signal calibrate_north_requested
+signal reset_position_requested
 
 var _room_data:      Array        = []
 var _status_dots:    Dictionary   = {}   # room_id -> ColorRect
@@ -15,6 +18,12 @@ var _steps_label:    RichTextLabel
 var _popup:          Control      = null
 var _popup_backdrop: ColorRect    = null
 var _popup_room_id:  String       = ""
+
+# ── Location bar state ────────────────────────────────────────────────────────
+var _sensor_btn:  Button = null
+var _calib_btn:   Button = null
+var _compass_lbl: Label  = null
+var _sensor_on:   bool   = false
 
 # ── Joystick state ────────────────────────────────────────────────────────────
 var _joy_panel:  Control = null
@@ -30,6 +39,7 @@ func _ready() -> void:
 	_build_left_panel()
 	_build_nav_panel()
 	_build_joystick()
+	_build_location_bar()
 
 # ── Left panel ────────────────────────────────────────────────────────────────
 
@@ -383,6 +393,77 @@ func _on_go_pressed(room_id: String) -> void:
 func _on_clear_pressed() -> void:
 	clear_route()
 	navigation_cleared.emit()
+
+# ── Location bar (sensor mode controls) ──────────────────────────────────────
+
+func _build_location_bar() -> void:
+	var panel = PanelContainer.new()
+	panel.name = "LocationBar"
+	# Anchor bottom-left, above the joystick dead-zone
+	panel.anchor_left   = 0.0;  panel.anchor_right  = 0.0
+	panel.anchor_top    = 1.0;  panel.anchor_bottom = 1.0
+	panel.offset_left   = 4;    panel.offset_right  = 284
+	panel.offset_top    = -100; panel.offset_bottom = -24
+	var ps = StyleBoxFlat.new()
+	ps.bg_color = Color(0.08, 0.10, 0.18, 0.88)
+	ps.corner_radius_top_left    = 6
+	ps.corner_radius_top_right   = 6
+	ps.corner_radius_bottom_left = 6
+	ps.corner_radius_bottom_right = 6
+	ps.content_margin_top    = 6.0
+	ps.content_margin_bottom = 6.0
+	ps.content_margin_left   = 8.0
+	ps.content_margin_right  = 8.0
+	panel.add_theme_stylebox_override("panel", ps)
+	add_child(panel)
+
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 4)
+	panel.add_child(vbox)
+
+	# Button row
+	var hbox = HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 6)
+	vbox.add_child(hbox)
+
+	_sensor_btn = Button.new()
+	_sensor_btn.text = "📍 Sensor OFF"
+	_sensor_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_sensor_btn.add_theme_font_size_override("font_size", 11)
+	_sensor_btn.pressed.connect(_on_sensor_btn_pressed)
+	hbox.add_child(_sensor_btn)
+
+	_calib_btn = Button.new()
+	_calib_btn.text = "⊙ Calibrate ↑"
+	_calib_btn.disabled = true
+	_calib_btn.add_theme_font_size_override("font_size", 11)
+	_calib_btn.pressed.connect(func() -> void: calibrate_north_requested.emit())
+	hbox.add_child(_calib_btn)
+
+	var reset_btn = Button.new()
+	reset_btn.text = "⌂ Reset"
+	reset_btn.add_theme_font_size_override("font_size", 11)
+	reset_btn.pressed.connect(func() -> void: reset_position_requested.emit())
+	hbox.add_child(reset_btn)
+
+	# Compass label
+	_compass_lbl = Label.new()
+	_compass_lbl.text = "Compass: —"
+	_compass_lbl.add_theme_font_size_override("font_size", 10)
+	_compass_lbl.add_theme_color_override("font_color", Color(0.65, 0.70, 0.90))
+	vbox.add_child(_compass_lbl)
+
+func _on_sensor_btn_pressed() -> void:
+	_sensor_on = not _sensor_on
+	_sensor_btn.text = "📍 Sensor ON" if _sensor_on else "📍 Sensor OFF"
+	_calib_btn.disabled = not _sensor_on
+	if not _sensor_on:
+		_compass_lbl.text = "Compass: —"
+	sensor_mode_toggled.emit(_sensor_on)
+
+func update_compass(deg: float) -> void:
+	if _compass_lbl:
+		_compass_lbl.text = "Compass: %.1f°" % deg
 
 # ── Virtual joystick ──────────────────────────────────────────────────────────
 

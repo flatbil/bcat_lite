@@ -7,11 +7,13 @@ extends Node3D
 @onready var path_display: Node3D  = $PathDisplay
 @onready var ui:           Control = $CanvasLayer/Ui
 @onready var player:       Node3D  = $Player
+@onready var sim_loc:      Node    = $SimLocation
 
 # Last rooms payload from backend (includes meetings_today per room)
 var _rooms_data:     Dictionary = {}
 var _current_dest:   String     = ""
 var _last_route_pos: Vector3    = Vector3(1e9, 1e9, 1e9)
+var _sensor_mode:    bool       = false
 
 func _ready() -> void:
 	get_viewport().physics_object_picking = true
@@ -23,10 +25,16 @@ func _ready() -> void:
 	ui.room_info_requested.connect(_on_room_info_requested)
 	ui.joy_input.connect(func(d: Vector2) -> void: player.joy_dir = d)
 
+	# Sensor / location bar signals
+	ui.sensor_mode_toggled.connect(_on_sensor_mode_toggled)
+	ui.calibrate_north_requested.connect(_on_calibrate_north)
+	ui.reset_position_requested.connect(_on_reset_position)
+	sim_loc.location_changed.connect(_on_sim_location_changed)
+
 	ui.set_room_data(building.get_room_data())
 	room_manager.fetch_rooms()
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _current_dest.is_empty() or not is_instance_valid(player):
 		return
 	if player.position.distance_to(_last_route_pos) > 2.0:
@@ -34,6 +42,10 @@ func _process(_delta: float) -> void:
 		var pts = navigator.route_to_room(player.global_position, _current_dest)
 		_draw_path(pts)
 		ui.show_navigation(_current_dest, pts)
+
+	# Update compass display while sensor mode is active
+	if _sensor_mode:
+		ui.update_compass(sim_loc.get_current_bearing_deg())
 
 func _on_rooms_updated(data: Dictionary) -> void:
 	_rooms_data = data
@@ -109,3 +121,23 @@ func _clear_route() -> void:
 	for child in path_display.get_children():
 		child.queue_free()
 	building.clear_selection()
+
+# ── Sensor / location callbacks ────────────────────────────────────────────────
+
+func _on_sim_location_changed(pos: Vector3) -> void:
+	player.position = pos
+
+func _on_sensor_mode_toggled(on: bool) -> void:
+	_sensor_mode        = on
+	player.sensor_mode  = on
+	sim_loc.enable(on)
+	if on:
+		sim_loc.set_start_position(player.position)
+
+func _on_calibrate_north() -> void:
+	sim_loc.calibrate_north()
+
+func _on_reset_position() -> void:
+	var entrance := Vector3(50, 0, 44)
+	player.position = entrance
+	sim_loc.set_start_position(entrance)

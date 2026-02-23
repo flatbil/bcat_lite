@@ -2,11 +2,33 @@
 # cd backend_stub && pip install fastapi uvicorn && python mock_server.py
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from math import cos, radians
+from typing import Optional
 import uvicorn
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
                    allow_methods=["*"], allow_headers=["*"])
+
+# ── GPS / location state ──────────────────────────────────────────────────────
+_gps_state = {"lat": None, "lon": None, "accuracy": None}
+# Anchor: maps a real-world lat/lon to a building X/Z coordinate.
+# Until set via POST /location/anchor, has_fix will be false.
+_gps_anchor = {"lat": None, "lon": None, "bx": 50.0, "bz": 44.0}
+
+
+class GpsPayload(BaseModel):
+    lat: float
+    lon: float
+    accuracy: Optional[float] = None
+
+
+class AnchorPayload(BaseModel):
+    lat: float
+    lon: float
+    building_x: float = 50.0
+    building_z: float = 44.0
 
 rooms = {
     # ── North Wing ────────────────────────────────────────────────────────────
@@ -154,6 +176,42 @@ rooms = {
         ],
     },
 }
+
+
+@app.post("/location/gps")
+def post_gps(payload: GpsPayload):
+    """Receive a GPS fix from the companion browser page."""
+    _gps_state["lat"] = payload.lat
+    _gps_state["lon"] = payload.lon
+    _gps_state["accuracy"] = payload.accuracy
+    return {"status": "ok"}
+
+
+@app.get("/location/building")
+def get_building_location():
+    """Convert latest GPS fix to building X/Z using the anchor mapping."""
+    if _gps_anchor["lat"] is None or _gps_state["lat"] is None:
+        return {"has_fix": False}
+    # Equirectangular approximation
+    anchor_lat = _gps_anchor["lat"]
+    anchor_lon = _gps_anchor["lon"]
+    dx = ((_gps_state["lon"] - anchor_lon)
+          * cos(radians(anchor_lat)) * 111319.5)
+    dz = -((_gps_state["lat"] - anchor_lat) * 111319.5)  # -z = north
+    x = _gps_anchor["bx"] + dx
+    z = _gps_anchor["bz"] + dz
+    return {"has_fix": True, "x": x, "z": z,
+            "accuracy": _gps_state["accuracy"]}
+
+
+@app.post("/location/anchor")
+def set_anchor(payload: AnchorPayload):
+    """Map a real-world GPS coordinate to a building position."""
+    _gps_anchor["lat"] = payload.lat
+    _gps_anchor["lon"] = payload.lon
+    _gps_anchor["bx"]  = payload.building_x
+    _gps_anchor["bz"]  = payload.building_z
+    return {"status": "ok", "anchor": _gps_anchor}
 
 
 @app.get("/rooms")

@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" uid="uid://bh3vhq7uxpufm" path="res://scenes/UI.tscn" id="5_ui"]
 [ext_resource type="Script" path="res://scripts/camera_controller.gd" id="6_cam"]
 [ext_resource type="Script" path="res://scripts/player.gd" id="7_player"]
+[ext_resource type="Script" path="res://scripts/sim_location.gd" id="8_simloc"]
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
@@ -35,6 +36,9 @@ script = ExtResource("3_rm")
 [node name="Player" type="Node3D" parent="."]
 position = Vector3(50, 0, 44)
 script = ExtResource("7_player")
+
+[node name="SimLocation" type="Node" parent="."]
+script = ExtResource("8_simloc")
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
 

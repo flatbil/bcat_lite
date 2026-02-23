@@ -219,11 +219,106 @@ Each room door node sits on the hallway as an in-chain node (connected to the tw
 
 ---
 
+---
+
+## Session 5 — Phone location tracking (dead reckoning + GPS corrections)
+
+**Goal:** Drive the player marker from the phone's physical movement rather than WASD.
+Primary: accelerometer step detection + magnetometer compass (dead reckoning).
+Corrections: GPS from a companion browser page, smoothly blended like Google Maps.
+Joystick kept as fallback/override.
+
+### Architecture
+
+```
+[Phone browser — backend_stub/companion.html]
+  navigator.geolocation.watchPosition() → POST /location/gps every 10 s
+
+[backend_stub/mock_server.py]
+  Stores latest lat/lon, converts to building X/Z via anchor mapping
+  GET /location/building → {x, z, has_fix}
+
+[scripts/sim_location.gd]
+  Accelerometer LPF → step detection → dead reckoning (heading from magnetometer)
+  HTTPRequest polls GET /location/building every 5 s
+  GPS fix → accumulate _gps_correction; bleed in at GPS_BLEND_SPEED m/s each frame
+  Emits location_changed(pos) each frame when enabled
+
+[scripts/main.gd]
+  _on_sim_location_changed(pos) → player.position = pos
+  Joystick/WASD override still runs through player.gd
+```
+
+### Smooth GPS blending (key design decision)
+
+Previous cell-tower approach teleported the marker on each fix (jumpy). Fix:
+
+- `_gps_correction: Vector3` accumulates `gps_pos - _pos` on each fix
+- Each frame: `move = min(GPS_BLEND_SPEED * delta, correction.length())`; advance `_pos` by that amount
+- Correction is consumed gradually (3 m/s) — invisible to the user
+- Fixes > 25 m away are discarded (`GPS_MAX_CORRECTION`) to reject wild readings
+- Between fixes: pure dead reckoning; no drift accumulation from stale GPS
+
+### Dead reckoning constants
+
+```gdscript
+const STRIDE_M       := 0.70   # metres per detected step
+const STEP_THRESHOLD := 1.2    # low-pass accel magnitude threshold
+const STEP_DEBOUNCE  := 0.30   # min seconds between steps
+const LPF_ALPHA      := 0.12   # exponential low-pass factor
+```
+
+### GPS blending constants
+
+```gdscript
+const GPS_POLL_INTERVAL  := 5.0    # seconds between /location/building polls
+const GPS_BLEND_SPEED    := 3.0    # m/s correction drain rate
+const GPS_MAX_CORRECTION := 25.0   # discard GPS fixes further than this
+```
+
+### Coordinate conversion (mock_server.py)
+
+Equirectangular approximation — accurate within ~1 m for a 100 m building:
+```python
+dx = (lon - anchor_lon) * cos(radians(anchor_lat)) * 111319.5
+dz = -(lat - anchor_lat) * 111319.5  # -z = north in building space
+x  = anchor_bx + dx
+z  = anchor_bz + dz
+```
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `scripts/sim_location.gd` | Full rewrite — extends Node; step detection, magnetometer heading, GPS poll + blend |
+| `scripts/player.gd` | Added `var sensor_mode := false`; WASD skipped when true, joystick always active |
+| `scripts/main.gd` | `@onready var sim_loc`; 4 new methods; compass update in `_process` |
+| `scenes/ui.gd` | 3 new signals; `_build_location_bar()` — floating panel with Sensor/Calibrate/Reset; `update_compass()` |
+| `scenes/Main.tscn` | Added `SimLocation` Node with `sim_location.gd` |
+| `backend_stub/mock_server.py` | `POST /location/gps`, `GET /location/building`, `POST /location/anchor` |
+| `backend_stub/companion.html` | New standalone page — GPS watch, 10 s POST, anchor setup, status display |
+
+### Calibration flow
+
+1. Run `python mock_server.py`; open `companion.html` on phone; set server URL to LAN IP
+2. Stand at building entrance (X=50, Z=44)
+3. In companion.html: **Set as Building Anchor** → maps current GPS to entrance coords
+4. In app: **📍 Sensor ON** → player position seeded to current marker location
+5. Point phone toward building north; tap **⊙ Calibrate ↑** → compass zero set
+6. Walk — dead reckoning updates marker; GPS corrections blend in every 5–10 s
+7. **⌂ Reset** anytime → returns marker + sim_loc to entrance (50, 0, 44)
+
+### Notes
+
+- In Godot editor (desktop), `Input.get_accelerometer()` and `Input.get_magnetometer()` return `Vector3.ZERO` — sensor mode will emit location_changed but position won't move (expected; no crash)
+- `sim_location.gd` uses its own hardcoded `API_BASE = "http://127.0.0.1:8000"` — update alongside `room_manager.gd` for Android LAN deployment
+- companion.html saves server URL to `localStorage` so it survives page reload
+
 ## Pending / Future work
 
 - **Satellite map overlay:** Godot cannot fetch tile imagery at runtime. To add an aerial floor texture, drop a PNG into `assets/` and apply it as an albedo texture on the main floor slab in `building_loader.gd`.
-- **Native Android positioning:** Add an Android plugin to feed real GPS/BLE/UWB coordinates into `player.position` (replacing WASD). Stub is `scripts/sim_location.gd`.
 - **Microsoft Graph integration:** Replace `mock_server.py` with an endpoint that reads real room calendar data via Graph API + corporate SSO.
 - **Real building model:** Export a floor-plan GLB and replace the procedural geometry in `building_loader.gd`.
 - **Route persistence:** Save last route to `user://last_route.json` so it survives app restart.
 - **Accessibility:** Add text-to-speech for turn-by-turn directions.
+- **Android magnetometer calibration:** On-device figure-8 motion to compensate for hard/soft iron distortion.
