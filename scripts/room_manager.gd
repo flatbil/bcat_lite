@@ -7,7 +7,7 @@ signal rooms_updated(data: Dictionary)
 # Desktop / emulator : 127.0.0.1 works fine.
 # Physical Android   : change to your laptop's LAN IP, e.g. "http://192.168.1.42:8000"
 #                      (phone and laptop must be on the same Wi-Fi network)
-var API_BASE := "http://127.0.0.1:8000"
+var API_BASE := "http://192.168.4.64:8000"
 @onready var http: HTTPRequest = HTTPRequest.new()
 
 func _ready():

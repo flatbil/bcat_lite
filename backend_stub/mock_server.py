@@ -2,9 +2,11 @@
 # cd backend_stub && pip install fastapi uvicorn && python mock_server.py
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from math import cos, radians
 from typing import Optional
+from pathlib import Path
 import uvicorn
 
 app = FastAPI()
@@ -176,6 +178,13 @@ rooms = {
         ],
     },
 }
+
+
+@app.get("/companion")
+def serve_companion():
+    """Serve the GPS companion page to the phone browser."""
+    html_path = Path(__file__).parent / "companion.html"
+    return FileResponse(html_path, media_type="text/html")
 
 
 @app.post("/location/gps")

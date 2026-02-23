@@ -17,7 +17,7 @@ const GPS_BLEND_SPEED    := 3.0   # m/s rate at which correction drains
 const GPS_MAX_CORRECTION := 25.0  # max plausible GPS correction (metres)
 
 # Shared with room_manager.gd — change both for Android deployment
-const API_BASE := "http://127.0.0.1:8000"
+const API_BASE := "http://192.168.4.64:8000"
 
 # ── State ─────────────────────────────────────────────────────────────────────
 var _enabled:        bool    = false
@@ -93,8 +93,8 @@ func _on_gps_response(_result: int, code: int, _headers: PackedStringArray, body
 	var data = JSON.parse_string(body.get_string_from_utf8())
 	if data == null or not data.get("has_fix", false):
 		return
-	var gx := float(data.get("x", _pos.x))
-	var gz := float(data.get("z", _pos.z))
+	var gx: float = float(data.get("x", _pos.x))
+	var gz: float = float(data.get("z", _pos.z))
 	var diff := Vector3(gx, 0.0, gz) - _pos
 	if diff.length() > GPS_MAX_CORRECTION:
 		return   # discard wild GPS reading
