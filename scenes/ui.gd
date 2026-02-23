@@ -30,12 +30,13 @@ var _joy_panel:  Control = null
 var _joy_thumb:  Control = null
 var _joy_active: bool    = false
 var _joy_finger: int     = -1   # active touch index (-1 = none, -2 = mouse)
-const _JOY_R    := 50.0         # max thumb travel from centre
+const _JOY_R    := 70.0         # max thumb travel from centre
 const _JOY_DEAD := 5.0          # dead-zone radius
-const _JOY_TR   := 20.0         # thumb half-size (thumb = 40 × 40 px)
+const _JOY_TR   := 30.0         # thumb half-size (thumb = 60 × 60 px)
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	mouse_filter = Control.MOUSE_FILTER_IGNORE   # let touch events reach 3D viewport
 	_build_left_panel()
 	_build_nav_panel()
 	_build_joystick()
@@ -47,7 +48,7 @@ func _build_left_panel() -> void:
 	var panel = PanelContainer.new()
 	panel.name = "LeftPanel"
 	panel.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE)
-	panel.custom_minimum_size = Vector2(260, 0)
+	panel.custom_minimum_size = Vector2(300, 0)
 	add_child(panel)
 
 	var vbox = VBoxContainer.new()
@@ -62,13 +63,13 @@ func _build_left_panel() -> void:
 	hs.content_margin_left = 6.0; hs.content_margin_right = 6.0
 	header.add_theme_stylebox_override("normal", hs)
 	header.add_theme_color_override("font_color", Color.WHITE)
-	header.add_theme_font_size_override("font_size", 15)
+	header.add_theme_font_size_override("font_size", 18)
 	vbox.add_child(header)
 
 	var hint = Label.new()
 	hint.text = "ℹ = schedule   Go = navigate"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.add_theme_font_size_override("font_size", 10)
+	hint.add_theme_font_size_override("font_size", 12)
 	hint.add_theme_color_override("font_color", Color(0.60, 0.60, 0.60))
 	vbox.add_child(hint)
 
@@ -155,20 +156,21 @@ func _rebuild_room_list() -> void:
 		var info = Label.new()
 		info.text = "%s (%d)" % [room["name"], room["capacity"]]
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		info.add_theme_font_size_override("font_size", 12)
+		info.add_theme_font_size_override("font_size", 14)
 		row.add_child(info)
 
 		# Info / schedule button
 		var info_btn = Button.new()
 		info_btn.text = "ℹ"
 		info_btn.tooltip_text = "View schedule"
-		info_btn.custom_minimum_size = Vector2(28, 0)
+		info_btn.custom_minimum_size = Vector2(44, 44)
 		info_btn.pressed.connect(_on_info_pressed.bind(id))
 		row.add_child(info_btn)
 
 		# Navigate button
 		var go_btn = Button.new()
 		go_btn.text = "Go"
+		go_btn.custom_minimum_size = Vector2(50, 44)
 		go_btn.pressed.connect(_on_go_pressed.bind(id))
 		row.add_child(go_btn)
 
@@ -402,8 +404,8 @@ func _build_location_bar() -> void:
 	# Anchor bottom-left, above the joystick dead-zone
 	panel.anchor_left   = 0.0;  panel.anchor_right  = 0.0
 	panel.anchor_top    = 1.0;  panel.anchor_bottom = 1.0
-	panel.offset_left   = 4;    panel.offset_right  = 284
-	panel.offset_top    = -100; panel.offset_bottom = -24
+	panel.offset_left   = 4;    panel.offset_right  = 360
+	panel.offset_top    = -140; panel.offset_bottom = -16
 	var ps = StyleBoxFlat.new()
 	ps.bg_color = Color(0.08, 0.10, 0.18, 0.88)
 	ps.corner_radius_top_left    = 6
@@ -429,27 +431,30 @@ func _build_location_bar() -> void:
 	_sensor_btn = Button.new()
 	_sensor_btn.text = "📍 Sensor OFF"
 	_sensor_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_sensor_btn.add_theme_font_size_override("font_size", 11)
+	_sensor_btn.add_theme_font_size_override("font_size", 14)
+	_sensor_btn.custom_minimum_size = Vector2(0, 52)
 	_sensor_btn.pressed.connect(_on_sensor_btn_pressed)
 	hbox.add_child(_sensor_btn)
 
 	_calib_btn = Button.new()
 	_calib_btn.text = "⊙ Calibrate ↑"
 	_calib_btn.disabled = true
-	_calib_btn.add_theme_font_size_override("font_size", 11)
+	_calib_btn.add_theme_font_size_override("font_size", 14)
+	_calib_btn.custom_minimum_size = Vector2(0, 52)
 	_calib_btn.pressed.connect(func() -> void: calibrate_north_requested.emit())
 	hbox.add_child(_calib_btn)
 
 	var reset_btn = Button.new()
 	reset_btn.text = "⌂ Reset"
-	reset_btn.add_theme_font_size_override("font_size", 11)
+	reset_btn.add_theme_font_size_override("font_size", 14)
+	reset_btn.custom_minimum_size = Vector2(0, 52)
 	reset_btn.pressed.connect(func() -> void: reset_position_requested.emit())
 	hbox.add_child(reset_btn)
 
 	# Compass label
 	_compass_lbl = Label.new()
 	_compass_lbl.text = "Compass: —"
-	_compass_lbl.add_theme_font_size_override("font_size", 10)
+	_compass_lbl.add_theme_font_size_override("font_size", 13)
 	_compass_lbl.add_theme_color_override("font_color", Color(0.65, 0.70, 0.90))
 	vbox.add_child(_compass_lbl)
 
@@ -473,8 +478,8 @@ func _build_joystick() -> void:
 	base.name = "JoyBase"
 	base.anchor_left   = 1.0;  base.anchor_right  = 1.0
 	base.anchor_top    = 1.0;  base.anchor_bottom = 1.0
-	base.offset_left   = -390; base.offset_right  = -280
-	base.offset_top    = -130; base.offset_bottom = -20
+	base.offset_left   = -470; base.offset_right  = -310
+	base.offset_top    = -185; base.offset_bottom = -25
 	base.mouse_filter  = Control.MOUSE_FILTER_STOP
 	_joy_panel = base
 	add_child(base)
@@ -485,10 +490,10 @@ func _build_joystick() -> void:
 	ring.mouse_filter = Control.MOUSE_FILTER_PASS
 	var rs = StyleBoxFlat.new()
 	rs.bg_color = Color(0.15, 0.15, 0.15, 0.55)
-	rs.corner_radius_top_left    = 55
-	rs.corner_radius_top_right   = 55
-	rs.corner_radius_bottom_left = 55
-	rs.corner_radius_bottom_right = 55
+	rs.corner_radius_top_left    = 80
+	rs.corner_radius_top_right   = 80
+	rs.corner_radius_bottom_left = 80
+	rs.corner_radius_bottom_right = 80
 	ring.add_theme_stylebox_override("panel", rs)
 	base.add_child(ring)
 
@@ -523,7 +528,7 @@ func _build_joystick() -> void:
 
 # Handle mouse events (desktop + emulated touch on desktop)
 func _on_joy_gui_input(event: InputEvent) -> void:
-	var center := Vector2(55.0, 55.0)
+	var center := Vector2(80.0, 80.0)
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed and _joy_finger == -1:
 			_joy_finger = -2   # mouse sentinel
@@ -536,12 +541,13 @@ func _on_joy_gui_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and _joy_active and _joy_finger == -2:
 		_update_joy(event.position - center)
 
+
 # Handle real screen-touch events (Android)
 func _input(event: InputEvent) -> void:
 	if _joy_panel == null:
 		return
 	var rect   := _joy_panel.get_global_rect()
-	var center := rect.position + Vector2(55.0, 55.0)
+	var center := rect.position + Vector2(80.0, 80.0)
 	if event is InputEventScreenTouch:
 		if event.pressed and _joy_finger == -1 and rect.has_point(event.position):
 			_joy_finger = event.index
@@ -559,12 +565,12 @@ func _input(event: InputEvent) -> void:
 
 func _update_joy(delta: Vector2) -> void:
 	var clamped := delta.limit_length(_JOY_R - _JOY_TR)
-	var c55     := Vector2(55.0, 55.0)
+	var c55     := Vector2(80.0, 80.0)
 	_joy_thumb.position = c55 + clamped - Vector2(_JOY_TR, _JOY_TR)
 	var dir := clamped / (_JOY_R - _JOY_TR) if clamped.length() > _JOY_DEAD else Vector2.ZERO
 	joy_input.emit(dir)
 
 func _reset_joy() -> void:
 	if _joy_thumb:
-		_joy_thumb.position = Vector2(55.0 - _JOY_TR, 55.0 - _JOY_TR)
+		_joy_thumb.position = Vector2(80.0 - _JOY_TR, 80.0 - _JOY_TR)
 	joy_input.emit(Vector2.ZERO)

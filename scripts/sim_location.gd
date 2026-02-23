@@ -7,7 +7,7 @@ signal location_changed(pos: Vector3)
 
 # ── Dead reckoning constants ──────────────────────────────────────────────────
 const STRIDE_M       := 0.70   # metres per detected step
-const STEP_THRESHOLD := 1.2    # low-pass accel magnitude to count as step
+const STEP_THRESHOLD := 2.0    # high-pass accel magnitude to count as step
 const STEP_DEBOUNCE  := 0.30   # min seconds between steps
 const LPF_ALPHA      := 0.12   # exponential low-pass factor
 
@@ -15,6 +15,9 @@ const LPF_ALPHA      := 0.12   # exponential low-pass factor
 const GPS_POLL_INTERVAL  := 5.0   # seconds between /location/building polls
 const GPS_BLEND_SPEED    := 3.0   # m/s rate at which correction drains
 const GPS_MAX_CORRECTION := 25.0  # max plausible GPS correction (metres)
+
+# ── Compass constants ─────────────────────────────────────────────────────────
+const MAG_MIN := 5.0   # µT — below this use gyroscope yaw fallback (S10e etc.)
 
 # Shared with room_manager.gd — change both for Android deployment
 const API_BASE := "http://192.168.4.64:8000"
@@ -24,7 +27,8 @@ var _enabled:        bool    = false
 var _pos:            Vector3 = Vector3(50, 0, 44)   # building entrance default
 var _accel_smooth:   Vector3 = Vector3.ZERO
 var _step_cooldown:  float   = 0.0
-var _north_bearing:  float   = 0.0                  # calibrated compass zero
+var _north_bearing:  float   = 0.0                  # calibrated compass zero (mag path)
+var _heading_rad:    float   = 0.0                  # current heading from calibrated north
 var _gps_correction: Vector3 = Vector3.ZERO
 var _gps_timer:      float   = 0.0
 var _http_busy:      bool    = false
@@ -42,14 +46,22 @@ func _process(delta: float) -> void:
 	if not _enabled:
 		return
 
-	# Step detection via low-pass filtered accelerometer
+	# Step detection: high-pass = raw minus LPF baseline (removes gravity ~9.8 m/s²)
 	var raw: Vector3 = Input.get_accelerometer()
+	var hp  := raw - _accel_smooth              # dynamic component only
 	_accel_smooth = _accel_smooth.lerp(raw, LPF_ALPHA)
-	var mag := _accel_smooth.length()
+	var mag := hp.length()
 	_step_cooldown = max(0.0, _step_cooldown - delta)
 	if mag > STEP_THRESHOLD and _step_cooldown <= 0.0:
 		_on_step()
 		_step_cooldown = STEP_DEBOUNCE
+
+	# Heading: magnetometer when strong enough, gyroscope yaw fallback otherwise
+	var mag_vec := Input.get_magnetometer()
+	if mag_vec.length() > MAG_MIN:
+		_heading_rad = _get_raw_bearing(mag_vec) - _north_bearing
+	else:
+		_heading_rad += Input.get_gyroscope().y * delta   # integrate yaw (portrait mode)
 
 	# Bleed GPS correction into position at a constant rate
 	var corr_len := _gps_correction.length()
@@ -69,10 +81,8 @@ func _process(delta: float) -> void:
 
 # ── Step handler ──────────────────────────────────────────────────────────────
 func _on_step() -> void:
-	var mag_raw: Vector3 = Input.get_magnetometer()
-	var bearing: float   = _get_raw_bearing(mag_raw) - _north_bearing
-	_pos.x += sin(bearing) * STRIDE_M
-	_pos.z -= cos(bearing) * STRIDE_M   # -Z is north in building space
+	_pos.x += sin(_heading_rad) * STRIDE_M
+	_pos.z -= cos(_heading_rad) * STRIDE_M   # -Z is north in building space
 
 func _get_raw_bearing(m: Vector3) -> float:
 	return atan2(m.x, m.y)
@@ -111,10 +121,11 @@ func set_start_position(pos: Vector3) -> void:
 	_gps_correction = Vector3.ZERO
 
 func calibrate_north() -> void:
-	var m := Input.get_magnetometer()
-	_north_bearing = _get_raw_bearing(m)
+	var mag := Input.get_magnetometer()
+	if mag.length() > MAG_MIN:
+		_north_bearing = _get_raw_bearing(mag)   # lock current direction as north
+	else:
+		_heading_rad = 0.0                        # gyro path: treat current direction as north
 
 func get_current_bearing_deg() -> float:
-	var m := Input.get_magnetometer()
-	var b := _get_raw_bearing(m) - _north_bearing
-	return fmod(rad_to_deg(b) + 360.0, 360.0)
+	return fmod(rad_to_deg(_heading_rad) + 360.0, 360.0)
