@@ -4,6 +4,7 @@
 extends Node
 
 signal location_changed(pos: Vector3)
+signal gps_fix(lat: float, lon: float)
 
 # ── Dead reckoning constants ──────────────────────────────────────────────────
 const STRIDE_M       := 0.70   # metres per detected step
@@ -109,6 +110,9 @@ func _on_gps_response(_result: int, code: int, _headers: PackedStringArray, body
 	if diff.length() > GPS_MAX_CORRECTION:
 		return   # discard wild GPS reading
 	_gps_correction = diff
+	# Emit raw GPS coords for campus building detection
+	if data.has("lat") and data.has("lon"):
+		gps_fix.emit(float(data["lat"]), float(data["lon"]))
 
 # ── Public API ────────────────────────────────────────────────────────────────
 func enable(on: bool) -> void:

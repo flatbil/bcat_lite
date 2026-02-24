@@ -1,0 +1,135 @@
+{
+  "id": "school_main",
+  "display_name": "Main School Building",
+  "type": "school_h_plan",
+  "floor_height": 4.0,
+  "footprint": [100, 80],
+  "entrance": [50, 0, 44],
+  "gps_anchor": { "lat": 47.543, "lon": -122.012, "bx": 50, "bz": 44 },
+  "floors": [
+    {
+      "index": 0,
+      "name": "Ground Floor",
+      "rooms": [
+        {"id":"bay_747",    "name":"Gymnasium",          "pos":[18,0,-32],"size":[30,7,12],"capacity":200,"calendar_id":"gym@school.edu"},
+        {"id":"bay_767",    "name":"Art Room",            "pos":[64,0,-31],"size":[18,4,10],"capacity": 50,"calendar_id":"art@school.edu"},
+        {"id":"bay_777",    "name":"Classroom Block",     "pos":[80,0,-31],"size":[18,4,10],"capacity": 80,"calendar_id":"classblock@school.edu"},
+        {"id":"visitor_ctr","name":"Main Office",         "pos":[12,0, -7],"size":[18,4, 9],"capacity": 20,"calendar_id":"office@school.edu"},
+        {"id":"safety_ofc", "name":"Counselor's Office",  "pos":[35,0, -7],"size":[14,4, 9],"capacity": 10,"calendar_id":"counselor@school.edu"},
+        {"id":"north_cafe", "name":"Staff Lounge",        "pos":[63,0, -7],"size":[18,4, 9],"capacity": 40,"calendar_id":"stafflounge@school.edu"},
+        {"id":"quality_ctl","name":"Library",             "pos":[82,0, -7],"size":[16,4, 9],"capacity": 60,"calendar_id":"library@school.edu"},
+        {"id":"final_asm",  "name":"Assembly Hall",       "pos":[20,0,  7],"size":[26,5, 9],"capacity":150,"calendar_id":"assembly@school.edu"},
+        {"id":"med_center", "name":"Nurse's Office",      "pos":[42,0,  7],"size":[10,4, 9],"capacity": 10,"calendar_id":"nurse@school.edu"},
+        {"id":"conf_777x",  "name":"Conference Room",     "pos":[65,0,  7],"size":[14,4, 9],"capacity": 30,"calendar_id":"conf@school.edu"},
+        {"id":"bay_777x",   "name":"Computer Lab",        "pos":[84,0,  7],"size":[16,4, 9],"capacity": 40,"calendar_id":"complab@school.edu"},
+        {"id":"tool_crib",  "name":"Custodial Room",      "pos":[10,0, 31],"size":[12,4,10],"capacity": 10,"calendar_id":"custodial@school.edu"},
+        {"id":"engineering","name":"Science Lab",         "pos":[37,0, 31],"size":[18,4,10],"capacity": 60,"calendar_id":"scilab@school.edu"},
+        {"id":"south_cafe", "name":"Cafeteria",           "pos":[68,0, 31],"size":[28,5,10],"capacity":200,"calendar_id":"cafeteria@school.edu"},
+        {"id":"delivery",   "name":"Storage Room",        "pos":[90,0, 31],"size":[10,4,10],"capacity": 20,"calendar_id":"storage@school.edu"}
+      ],
+      "nav": {
+        "nodes": {
+          "n_start": [50,0,44], "n_ent": [50,0,30],
+          "mh1":[  5,0, 0],"mh2":[25,0, 0],"mh3":[50,0, 0],"mh4":[75,0, 0],"mh5":[95,0, 0],
+          "nh1":[  5,0,-24],"nh2":[25,0,-24],"nh3":[50,0,-24],"nh4":[75,0,-24],"nh5":[95,0,-24],
+          "sh1":[  5,0,24], "sh2":[25,0,24], "sh3":[50,0,24], "sh4":[75,0,24], "sh5":[95,0,24],
+          "d_gym":[18,0,-24],"d_art":[64,0,-24],"d_cls":[80,0,-24],
+          "d_office":[12,0,0],"d_assm":[20,0,0],"d_couns":[35,0,0],"d_nurse":[42,0,0],
+          "d_slounge":[58,0,0],"d_conf":[65,0,0],"d_lib":[82,0,0],"d_complab":[86,0,0],
+          "d_cust":[10,0,24],"d_scilab":[37,0,24],"d_cafet":[68,0,24],"d_store":[90,0,24]
+        },
+        "edges": {
+          "n_start":["n_ent"],
+          "n_ent":["n_start","sh3"],
+          "mh1":["mh2","d_office","d_assm","nh1","sh1"],
+          "mh2":["mh1","mh3","d_office","d_assm","d_couns","d_nurse"],
+          "mh3":["mh2","mh4","d_couns","d_nurse","d_slounge","d_conf","nh3","sh3"],
+          "mh4":["mh3","mh5","d_slounge","d_conf","d_lib","d_complab"],
+          "mh5":["mh4","d_lib","d_complab","nh5","sh5"],
+          "nh1":["nh2","d_gym","mh1"],
+          "nh2":["nh1","nh3","d_gym"],
+          "nh3":["nh2","nh4","d_art","mh3"],
+          "nh4":["nh3","nh5","d_art","d_cls"],
+          "nh5":["nh4","d_cls","mh5"],
+          "sh1":["sh2","d_cust","mh1"],
+          "sh2":["sh1","sh3","d_cust","d_scilab"],
+          "sh3":["sh2","sh4","d_scilab","d_cafet","mh3","n_ent"],
+          "sh4":["sh3","sh5","d_cafet","d_store"],
+          "sh5":["sh4","d_store","mh5"],
+          "d_gym":["nh1","nh2"],
+          "d_art":["nh3","nh4"],
+          "d_cls":["nh4","nh5"],
+          "d_office":["mh1","mh2"],
+          "d_assm":["mh1","mh2"],
+          "d_couns":["mh2","mh3"],
+          "d_nurse":["mh2","mh3"],
+          "d_slounge":["mh3","mh4"],
+          "d_conf":["mh3","mh4"],
+          "d_lib":["mh4","mh5"],
+          "d_complab":["mh4","mh5"],
+          "d_cust":["sh1","sh2"],
+          "d_scilab":["sh2","sh3"],
+          "d_cafet":["sh3","sh4"],
+          "d_store":["sh4","sh5"]
+        },
+        "room_node_map": {
+          "bay_747":"d_gym",
+          "bay_767":"d_art",
+          "bay_777":"d_cls",
+          "visitor_ctr":"d_office",
+          "safety_ofc":"d_couns",
+          "north_cafe":"d_slounge",
+          "quality_ctl":"d_lib",
+          "final_asm":"d_assm",
+          "med_center":"d_nurse",
+          "conf_777x":"d_conf",
+          "bay_777x":"d_complab",
+          "tool_crib":"d_cust",
+          "engineering":"d_scilab",
+          "south_cafe":"d_cafet",
+          "delivery":"d_store"
+        }
+      }
+    },
+    {
+      "index": 1,
+      "name": "First Floor",
+      "rooms": [
+        {"id":"f1_admin",  "name":"Administration Suite","pos":[20,0,-10],"size":[20,4,14],"capacity": 15,"calendar_id":"admin@school.edu"},
+        {"id":"f1_itp",    "name":"IT Department",       "pos":[55,0,-10],"size":[18,4,14],"capacity": 20,"calendar_id":"it@school.edu"},
+        {"id":"f1_seminar","name":"Seminar Room",         "pos":[80,0, 10],"size":[16,4,12],"capacity": 35,"calendar_id":"seminar@school.edu"}
+      ],
+      "nav": {
+        "nodes": {
+          "hall_w":[10,0, 0],
+          "hall_c":[50,0, 0],
+          "hall_e":[90,0, 0],
+          "d_admin":[20,0,-10],
+          "d_it":  [55,0,-10],
+          "d_sem": [80,0, 10]
+        },
+        "edges": {
+          "hall_w":["hall_c","d_admin"],
+          "hall_c":["hall_w","hall_e","d_admin","d_it"],
+          "hall_e":["hall_c","d_it","d_sem"],
+          "d_admin":["hall_w","hall_c"],
+          "d_it":["hall_c","hall_e"],
+          "d_sem":["hall_e"]
+        },
+        "room_node_map": {
+          "f1_admin":"d_admin",
+          "f1_itp":"d_it",
+          "f1_seminar":"d_sem"
+        }
+      }
+    }
+  ],
+  "vertical_connections": [
+    {
+      "id": "stairs_centre",
+      "type": "stairs",
+      "pos": [50, 0, 15],
+      "connects_floors": [0, 1]
+    }
+  ]
+}

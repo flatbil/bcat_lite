@@ -25,19 +25,29 @@ func _build_visual() -> void:
 	cyl.bottom_radius = 0.22
 	mi.mesh = cyl
 	var mat = StandardMaterial3D.new()
-	mat.albedo_color             = Color(0.0, 0.85, 1.0)
-	mat.emission_enabled         = true
-	mat.emission                 = Color(0.0, 0.45, 0.9)
+	mat.albedo_color               = Color(0.0, 0.85, 1.0)
+	mat.emission_enabled           = true
+	mat.emission                   = Color(0.0, 0.45, 0.9)
 	mat.emission_energy_multiplier = 1.4
+	# Ghost pass: outline visible through walls at low opacity
+	var ghost = StandardMaterial3D.new()
+	ghost.albedo_color               = Color(0.0, 0.85, 1.0, 0.22)
+	ghost.emission_enabled           = true
+	ghost.emission                   = Color(0.0, 0.45, 0.9)
+	ghost.emission_energy_multiplier = 0.6
+	ghost.transparency               = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ghost.no_depth_test              = true
+	ghost.render_priority            = 1
+	mat.next_pass = ghost
 	mi.material_override = mat
 	mi.position = Vector3(0, 0.9, 0)
 	add_child(mi)
 
-	# Billboard label
+	# Billboard label — fixed screen size like a Google Maps pin
 	var lbl = Label3D.new()
 	lbl.text       = "YOU"
+	lbl.font_size  = 9
 	lbl.pixel_size = 0.010
-	lbl.font_size  = 30
 	lbl.billboard  = BaseMaterial3D.BILLBOARD_ENABLED
 	lbl.modulate   = Color(0.0, 1.0, 1.0)
 	lbl.position   = Vector3(0, 2.1, 0)

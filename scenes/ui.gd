@@ -8,6 +8,8 @@ signal joy_input(dir: Vector2)
 signal sensor_mode_toggled(on: bool)
 signal calibrate_north_requested
 signal reset_position_requested
+signal building_selected(building_id: String)
+signal floor_selected(floor_index: int)
 
 var _room_data:      Array        = []
 var _status_dots:    Dictionary   = {}   # room_id -> ColorRect
@@ -25,22 +27,38 @@ var _calib_btn:   Button = null
 var _compass_lbl: Label  = null
 var _sensor_on:   bool   = false
 
+# ── Building picker state ─────────────────────────────────────────────────────
+var _building_picker: OptionButton = null
+var _building_ids:    Array        = []   # parallel array to picker items
+
+# ── Floor tab strip state ─────────────────────────────────────────────────────
+var _floor_strip: HBoxContainer = null
+var _floor_btns:  Array         = []   # Button per floor (index = floor index)
+var _floors_data: Array         = []   # [{index, name}, ...]
+var _active_floor: int          = 0
+
+# ── Search state ──────────────────────────────────────────────────────────────
+var _search_box:  LineEdit = null
+var _search_text: String   = ""
+
 # ── Joystick state ────────────────────────────────────────────────────────────
 var _joy_panel:  Control = null
 var _joy_thumb:  Control = null
 var _joy_active: bool    = false
 var _joy_finger: int     = -1   # active touch index (-1 = none, -2 = mouse)
-const _JOY_R    := 70.0         # max thumb travel from centre
-const _JOY_DEAD := 5.0          # dead-zone radius
-const _JOY_TR   := 30.0         # thumb half-size (thumb = 60 × 60 px)
+const _JOY_R    := 70.0
+const _JOY_DEAD := 5.0
+const _JOY_TR   := 30.0
+
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	mouse_filter = Control.MOUSE_FILTER_IGNORE   # let touch events reach 3D viewport
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build_left_panel()
 	_build_nav_panel()
 	_build_joystick()
 	_build_location_bar()
+
 
 # ── Left panel ────────────────────────────────────────────────────────────────
 
@@ -54,6 +72,7 @@ func _build_left_panel() -> void:
 	var vbox = VBoxContainer.new()
 	panel.add_child(vbox)
 
+	# ── Header ────────────────────────────────────────────────────────────────
 	var header = Label.new()
 	header.text = "Rooms & Spaces"
 	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -66,6 +85,28 @@ func _build_left_panel() -> void:
 	header.add_theme_font_size_override("font_size", 18)
 	vbox.add_child(header)
 
+	# ── Building picker ───────────────────────────────────────────────────────
+	_building_picker = OptionButton.new()
+	_building_picker.add_theme_font_size_override("font_size", 14)
+	_building_picker.custom_minimum_size = Vector2(0, 40)
+	_building_picker.item_selected.connect(_on_building_item_selected)
+	vbox.add_child(_building_picker)
+
+	# ── Floor tab strip ───────────────────────────────────────────────────────
+	_floor_strip = HBoxContainer.new()
+	_floor_strip.name = "FloorStrip"
+	_floor_strip.add_theme_constant_override("separation", 2)
+	vbox.add_child(_floor_strip)
+
+	# ── Search box ────────────────────────────────────────────────────────────
+	_search_box = LineEdit.new()
+	_search_box.placeholder_text = "Search rooms..."
+	_search_box.add_theme_font_size_override("font_size", 14)
+	_search_box.custom_minimum_size = Vector2(0, 36)
+	_search_box.text_changed.connect(_on_search_changed)
+	vbox.add_child(_search_box)
+
+	# ── Hint / separator ─────────────────────────────────────────────────────
 	var hint = Label.new()
 	hint.text = "ℹ = schedule   Go = navigate"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -75,6 +116,7 @@ func _build_left_panel() -> void:
 
 	vbox.add_child(HSeparator.new())
 
+	# ── Room list ─────────────────────────────────────────────────────────────
 	var scroll = ScrollContainer.new()
 	scroll.name = "Scroll"
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -84,6 +126,7 @@ func _build_left_panel() -> void:
 	_room_list.name = "RoomList"
 	_room_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_room_list)
+
 
 # ── Right nav panel ───────────────────────────────────────────────────────────
 
@@ -125,11 +168,70 @@ func _build_nav_panel() -> void:
 	clear_btn.pressed.connect(_on_clear_pressed)
 	vbox.add_child(clear_btn)
 
+
 # ── Public API ────────────────────────────────────────────────────────────────
+
+func set_building_list(buildings: Array) -> void:
+	if _building_picker == null:
+		return
+	_building_picker.clear()
+	_building_ids.clear()
+	for b in buildings:
+		_building_picker.add_item(b["display_name"])
+		_building_ids.append(b["id"])
+
+
+func set_floors(floors: Array, active_floor: int) -> void:
+	_floors_data   = floors
+	_active_floor  = active_floor
+	if _floor_strip == null:
+		return
+
+	for child in _floor_strip.get_children():
+		child.queue_free()
+	_floor_btns.clear()
+
+	for fd in floors:
+		var fi: int   = int(fd["index"])
+		var fname     := str(fd["name"])
+		var btn       := Button.new()
+		btn.text      = fname
+		btn.add_theme_font_size_override("font_size", 13)
+		btn.custom_minimum_size = Vector2(0, 34)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(_on_floor_btn_pressed.bind(fi))
+		_floor_strip.add_child(btn)
+		while _floor_btns.size() <= fi:
+			_floor_btns.append(null)
+		_floor_btns[fi] = btn
+
+	_apply_floor_button_style(active_floor)
+	_rebuild_room_list()
+
+
+func set_active_floor(floor_index: int) -> void:
+	_active_floor = floor_index
+	_apply_floor_button_style(floor_index)
+	_rebuild_room_list()
+
+
+func _apply_floor_button_style(active: int) -> void:
+	for fi in range(_floor_btns.size()):
+		var btn: Button = _floor_btns[fi]
+		if btn == null:
+			continue
+		if fi == active:
+			btn.add_theme_color_override("font_color", Color(1.0, 1.0, 0.4))
+			btn.add_theme_color_override("font_color_hover", Color(1.0, 1.0, 0.6))
+		else:
+			btn.remove_theme_color_override("font_color")
+			btn.remove_theme_color_override("font_color_hover")
+
 
 func set_room_data(rooms: Array) -> void:
 	_room_data = rooms
 	_rebuild_room_list()
+
 
 func _rebuild_room_list() -> void:
 	if _room_list == null:
@@ -138,12 +240,26 @@ func _rebuild_room_list() -> void:
 		child.queue_free()
 	_status_dots.clear()
 
+	# Build floor name lookup
+	var floor_name_map: Dictionary = {}
+	for fd in _floors_data:
+		floor_name_map[int(fd["index"])] = str(fd["name"])
+
+	var filter := _search_text.to_lower()
+
 	for room in _room_data:
-		var id: String  = room["id"]
-		var avail: bool = room.get("available", true)
+		var id: String    = room["id"]
+		var name_str: String = str(room.get("name", id))
+		var avail: bool   = room.get("available", true)
+		var fi: int       = int(room.get("floor_index", 0))
+
+		# Search filter
+		if filter != "" and not name_str.to_lower().contains(filter):
+			continue
 
 		var row = HBoxContainer.new()
 		row.name = "Row_" + id
+		row.add_theme_constant_override("separation", 4)
 
 		# Availability dot
 		var dot = ColorRect.new()
@@ -154,10 +270,23 @@ func _rebuild_room_list() -> void:
 
 		# Name + capacity
 		var info = Label.new()
-		info.text = "%s (%d)" % [room["name"], room["capacity"]]
+		var cap: int = int(room.get("capacity", 0))
+		info.text = "%s (%d)" % [name_str, cap]
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		info.add_theme_font_size_override("font_size", 14)
 		row.add_child(info)
+
+		# Floor badge (small label showing which floor)
+		var floor_badge = Label.new()
+		var fname: String = floor_name_map.get(fi, "F%d" % fi)
+		floor_badge.text = fname.substr(0, 2)   # e.g. "Gr" or "F1"
+		floor_badge.custom_minimum_size = Vector2(28, 0)
+		floor_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		floor_badge.add_theme_font_size_override("font_size", 11)
+		floor_badge.add_theme_color_override("font_color",
+			Color(0.9, 0.9, 0.5) if fi == _active_floor else Color(0.55, 0.55, 0.55))
+		floor_badge.tooltip_text = fname
+		row.add_child(floor_badge)
 
 		# Info / schedule button
 		var info_btn = Button.new()
@@ -176,24 +305,28 @@ func _rebuild_room_list() -> void:
 
 		_room_list.add_child(row)
 
+
 func update_availability(data: Dictionary) -> void:
 	for room_id in _status_dots:
 		var avail = data.get(room_id, {}).get("available", true)
 		_status_dots[room_id].color = Color.GREEN if avail else Color.RED
 
+
 func show_navigation(room_id: String, points: Array) -> void:
-	var room_name = room_id
+	var room_name := room_id
 	for r in _room_data:
 		if r["id"] == room_id:
-			room_name = r["name"]
+			room_name = str(r.get("name", room_id))
 			break
-	_dest_label.text = "→  " + room_name
+	_dest_label.text  = "→  " + room_name
 	_steps_label.text = _build_directions_bbcode(points)
 	_nav_panel.visible = true
 
+
 func clear_route() -> void:
 	_nav_panel.visible = false
-	_steps_label.text = ""
+	_steps_label.text  = ""
+
 
 # ── Meeting popup ─────────────────────────────────────────────────────────────
 
@@ -201,7 +334,6 @@ func show_room_popup(room_id: String, room_data: Dictionary) -> void:
 	_close_popup()
 	_popup_room_id = room_id
 
-	# Semi-transparent backdrop — clicking it closes the popup
 	_popup_backdrop = ColorRect.new()
 	_popup_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_popup_backdrop.color = Color(0, 0, 0, 0.42)
@@ -211,7 +343,6 @@ func show_room_popup(room_id: String, room_data: Dictionary) -> void:
 			_close_popup())
 	add_child(_popup_backdrop)
 
-	# Card panel
 	var card = PanelContainer.new()
 	card.z_index = 10
 	card.custom_minimum_size = Vector2(340, 0)
@@ -226,7 +357,6 @@ func show_room_popup(room_id: String, room_data: Dictionary) -> void:
 	card_style.content_margin_left   = 0.0
 	card_style.content_margin_right  = 0.0
 	card.add_theme_stylebox_override("panel", card_style)
-	# Centre the card
 	card.anchor_left   = 0.5;  card.anchor_right  = 0.5
 	card.anchor_top    = 0.5;  card.anchor_bottom = 0.5
 	card.offset_left   = -170; card.offset_right  = 170
@@ -239,7 +369,6 @@ func show_room_popup(room_id: String, room_data: Dictionary) -> void:
 	vbox.add_theme_constant_override("separation", 0)
 	card.add_child(vbox)
 
-	# Header strip — green if available, red if in use
 	var avail: bool = room_data.get("available", true)
 	var hdr_bg = PanelContainer.new()
 	var hbs = StyleBoxFlat.new()
@@ -255,7 +384,7 @@ func show_room_popup(room_id: String, room_data: Dictionary) -> void:
 	hdr_bg.add_child(hdr_row)
 
 	var title_lbl = Label.new()
-	title_lbl.text = room_data.get("name", room_id)
+	title_lbl.text = str(room_data.get("name", room_id))
 	title_lbl.add_theme_font_size_override("font_size", 18)
 	title_lbl.add_theme_color_override("font_color", Color.WHITE)
 	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -268,7 +397,6 @@ func show_room_popup(room_id: String, room_data: Dictionary) -> void:
 	close_btn.pressed.connect(_close_popup)
 	hdr_row.add_child(close_btn)
 
-	# Body with margin
 	var body = VBoxContainer.new()
 	body.add_theme_constant_override("separation", 5)
 	var body_margin = MarginContainer.new()
@@ -279,7 +407,6 @@ func show_room_popup(room_id: String, room_data: Dictionary) -> void:
 	body_margin.add_child(body)
 	vbox.add_child(body_margin)
 
-	# Status row
 	var status_row = HBoxContainer.new()
 	status_row.add_theme_constant_override("separation", 8)
 	body.add_child(status_row)
@@ -318,14 +445,14 @@ func show_room_popup(room_id: String, room_data: Dictionary) -> void:
 			mrow.add_theme_constant_override("separation", 8)
 
 			var time_lbl = Label.new()
-			time_lbl.text = mtg.get("time", "")
+			time_lbl.text = str(mtg.get("time", ""))
 			time_lbl.custom_minimum_size = Vector2(115, 0)
 			time_lbl.add_theme_color_override("font_color", Color(0.65, 0.72, 0.95))
 			time_lbl.add_theme_font_size_override("font_size", 12)
 			mrow.add_child(time_lbl)
 
 			var mtitle = Label.new()
-			mtitle.text = mtg.get("title", "")
+			mtitle.text = str(mtg.get("title", ""))
 			mtitle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			mtitle.add_theme_color_override("font_color", Color(0.88, 0.88, 0.88))
 			mtitle.add_theme_font_size_override("font_size", 12)
@@ -336,13 +463,13 @@ func show_room_popup(room_id: String, room_data: Dictionary) -> void:
 
 	body.add_child(HSeparator.new())
 
-	# Navigate button
 	var nav_btn = Button.new()
 	nav_btn.text = "Navigate Here  →"
 	nav_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	nav_btn.add_theme_font_size_override("font_size", 14)
 	nav_btn.pressed.connect(_on_popup_navigate_pressed)
 	body.add_child(nav_btn)
+
 
 func _close_popup() -> void:
 	if _popup_backdrop:
@@ -353,10 +480,12 @@ func _close_popup() -> void:
 		_popup = null
 	_popup_room_id = ""
 
+
 func _on_popup_navigate_pressed() -> void:
-	var rid = _popup_room_id
+	var rid := _popup_room_id
 	_close_popup()
 	navigate_requested.emit(rid)
+
 
 # ── Direction helpers ─────────────────────────────────────────────────────────
 
@@ -367,14 +496,19 @@ func _build_directions_bbcode(points: Array) -> String:
 	for i in range(points.size() - 1):
 		var a: Vector3 = points[i]
 		var b: Vector3 = points[i + 1]
-		var dir  = b - a
-		var dist = dir.length()
-		lines.append("%d. Head %s  (%.1f m)" % [i + 1, _heading_name(dir), dist])
+		var dir  := b - a
+		var dist := dir.length()
+		var step := "%d. Head %s  (%.1f m)" % [i + 1, _heading_name(dir), dist]
+		# Annotate vertical transitions
+		if abs(dir.y) > 0.5:
+			step += "  [color=#aaa][up/down stairs][/color]" if dir.y > 0 else "  [color=#aaa][down stairs][/color]"
+		lines.append(step)
 	lines.append("%d. Arrived ✓" % points.size())
 	return "\n".join(lines)
 
+
 func _heading_name(dir: Vector3) -> String:
-	var angle = atan2(dir.x, dir.z) * 180.0 / PI
+	var angle := atan2(dir.x, dir.z) * 180.0 / PI
 	if   angle >=  157.5 or angle < -157.5: return "north"
 	elif angle >=  112.5:                   return "northeast"
 	elif angle >=   67.5:                   return "east"
@@ -384,24 +518,41 @@ func _heading_name(dir: Vector3) -> String:
 	elif angle >= -112.5:                   return "west"
 	else:                                   return "northwest"
 
+
 # ── Button callbacks ──────────────────────────────────────────────────────────
 
 func _on_info_pressed(room_id: String) -> void:
 	room_info_requested.emit(room_id)
 
+
 func _on_go_pressed(room_id: String) -> void:
 	navigate_requested.emit(room_id)
+
 
 func _on_clear_pressed() -> void:
 	clear_route()
 	navigation_cleared.emit()
+
+
+func _on_building_item_selected(idx: int) -> void:
+	if idx >= 0 and idx < _building_ids.size():
+		building_selected.emit(_building_ids[idx])
+
+
+func _on_floor_btn_pressed(floor_index: int) -> void:
+	floor_selected.emit(floor_index)
+
+
+func _on_search_changed(text: String) -> void:
+	_search_text = text
+	_rebuild_room_list()
+
 
 # ── Location bar (sensor mode controls) ──────────────────────────────────────
 
 func _build_location_bar() -> void:
 	var panel = PanelContainer.new()
 	panel.name = "LocationBar"
-	# Anchor bottom-left, above the joystick dead-zone
 	panel.anchor_left   = 0.0;  panel.anchor_right  = 0.0
 	panel.anchor_top    = 1.0;  panel.anchor_bottom = 1.0
 	panel.offset_left   = 4;    panel.offset_right  = 360
@@ -423,13 +574,12 @@ func _build_location_bar() -> void:
 	vbox.add_theme_constant_override("separation", 4)
 	panel.add_child(vbox)
 
-	# Button row
 	var hbox = HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 6)
 	vbox.add_child(hbox)
 
 	_sensor_btn = Button.new()
-	_sensor_btn.text = "📍 Sensor OFF"
+	_sensor_btn.text = "Sensor OFF"
 	_sensor_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_sensor_btn.add_theme_font_size_override("font_size", 14)
 	_sensor_btn.custom_minimum_size = Vector2(0, 52)
@@ -437,7 +587,7 @@ func _build_location_bar() -> void:
 	hbox.add_child(_sensor_btn)
 
 	_calib_btn = Button.new()
-	_calib_btn.text = "⊙ Calibrate ↑"
+	_calib_btn.text = "Calibrate"
 	_calib_btn.disabled = true
 	_calib_btn.add_theme_font_size_override("font_size", 14)
 	_calib_btn.custom_minimum_size = Vector2(0, 52)
@@ -445,35 +595,36 @@ func _build_location_bar() -> void:
 	hbox.add_child(_calib_btn)
 
 	var reset_btn = Button.new()
-	reset_btn.text = "⌂ Reset"
+	reset_btn.text = "Reset"
 	reset_btn.add_theme_font_size_override("font_size", 14)
 	reset_btn.custom_minimum_size = Vector2(0, 52)
 	reset_btn.pressed.connect(func() -> void: reset_position_requested.emit())
 	hbox.add_child(reset_btn)
 
-	# Compass label
 	_compass_lbl = Label.new()
 	_compass_lbl.text = "Compass: —"
 	_compass_lbl.add_theme_font_size_override("font_size", 13)
 	_compass_lbl.add_theme_color_override("font_color", Color(0.65, 0.70, 0.90))
 	vbox.add_child(_compass_lbl)
 
+
 func _on_sensor_btn_pressed() -> void:
 	_sensor_on = not _sensor_on
-	_sensor_btn.text = "📍 Sensor ON" if _sensor_on else "📍 Sensor OFF"
+	_sensor_btn.text = "Sensor ON" if _sensor_on else "Sensor OFF"
 	_calib_btn.disabled = not _sensor_on
 	if not _sensor_on:
 		_compass_lbl.text = "Compass: —"
 	sensor_mode_toggled.emit(_sensor_on)
 
+
 func update_compass(deg: float) -> void:
 	if _compass_lbl:
 		_compass_lbl.text = "Compass: %.1f°" % deg
 
+
 # ── Virtual joystick ──────────────────────────────────────────────────────────
 
 func _build_joystick() -> void:
-	# Outer base — 110 × 110 px, positioned bottom-right clear of the nav panel
 	var base = Control.new()
 	base.name = "JoyBase"
 	base.anchor_left   = 1.0;  base.anchor_right  = 1.0
@@ -484,7 +635,6 @@ func _build_joystick() -> void:
 	_joy_panel = base
 	add_child(base)
 
-	# Outer ring (circle illusion via fully-rounded StyleBox)
 	var ring = PanelContainer.new()
 	ring.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	ring.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -497,7 +647,6 @@ func _build_joystick() -> void:
 	ring.add_theme_stylebox_override("panel", rs)
 	base.add_child(ring)
 
-	# "MOVE" hint label inside the ring
 	var hint = Label.new()
 	hint.text = "MOVE"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -509,7 +658,6 @@ func _build_joystick() -> void:
 	hint.mouse_filter = Control.MOUSE_FILTER_PASS
 	base.add_child(hint)
 
-	# Thumb circle
 	var thumb = PanelContainer.new()
 	thumb.custom_minimum_size = Vector2(_JOY_TR * 2, _JOY_TR * 2)
 	thumb.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -526,12 +674,12 @@ func _build_joystick() -> void:
 	_reset_joy()
 	base.gui_input.connect(_on_joy_gui_input)
 
-# Handle mouse events (desktop + emulated touch on desktop)
+
 func _on_joy_gui_input(event: InputEvent) -> void:
 	var center := Vector2(80.0, 80.0)
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed and _joy_finger == -1:
-			_joy_finger = -2   # mouse sentinel
+			_joy_finger = -2
 			_joy_active = true
 			_update_joy(event.position - center)
 		elif not event.pressed and _joy_finger == -2:
@@ -542,7 +690,6 @@ func _on_joy_gui_input(event: InputEvent) -> void:
 		_update_joy(event.position - center)
 
 
-# Handle real screen-touch events (Android)
 func _input(event: InputEvent) -> void:
 	if _joy_panel == null:
 		return
@@ -563,12 +710,14 @@ func _input(event: InputEvent) -> void:
 		_update_joy(event.position - center)
 		get_viewport().set_input_as_handled()
 
+
 func _update_joy(delta: Vector2) -> void:
 	var clamped := delta.limit_length(_JOY_R - _JOY_TR)
 	var c55     := Vector2(80.0, 80.0)
 	_joy_thumb.position = c55 + clamped - Vector2(_JOY_TR, _JOY_TR)
 	var dir := clamped / (_JOY_R - _JOY_TR) if clamped.length() > _JOY_DEAD else Vector2.ZERO
 	joy_input.emit(dir)
+
 
 func _reset_joy() -> void:
 	if _joy_thumb:

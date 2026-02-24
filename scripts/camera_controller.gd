@@ -135,6 +135,14 @@ func _pan_delta(delta: Vector2) -> void:
 	global_position -= right  * delta.x * scale
 	global_position += fwd_xz * delta.y * scale
 
+# Shift the camera vertically to keep the active floor centred on screen.
+var _floor_y: float = 0.0
+
+func set_look_at_y(y: float) -> void:
+	global_position.y += y - _floor_y
+	_floor_y = y
+
+
 # Camera's forward direction projected onto the XZ plane.
 func _flat_forward() -> Vector3:
 	return Vector3(

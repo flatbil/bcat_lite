@@ -1,0 +1,50 @@
+{
+  "id": "annex_b",
+  "display_name": "Annex B",
+  "type": "generic",
+  "floor_height": 4.0,
+  "footprint": [60, 40],
+  "entrance": [30, 0, 30],
+  "gps_anchor": { "lat": 47.544, "lon": -122.013, "bx": 30, "bz": 30 },
+  "floors": [
+    {
+      "index": 0,
+      "name": "Ground Floor",
+      "rooms": [
+        {"id":"anx_workshop","name":"Workshop",         "pos":[20,0, 0],"size":[15,4,10],"capacity":25,"calendar_id":"workshop@school.edu"},
+        {"id":"anx_storage", "name":"Material Storage", "pos":[45,0, 0],"size":[12,4,10],"capacity": 5,"calendar_id":"storage2@school.edu"},
+        {"id":"anx_lab",     "name":"Vocational Lab",   "pos":[20,0,20],"size":[15,4,10],"capacity":30,"calendar_id":"voclab@school.edu"}
+      ],
+      "nav": {
+        "nodes": {
+          "ax_start":[30,0,30],
+          "ax_ent":  [30,0,15],
+          "ax_hall_w":[15,0, 0],
+          "ax_hall_c":[30,0, 0],
+          "ax_hall_e":[50,0, 0],
+          "ax_hall_s":[30,0,20],
+          "ax_d_ws": [20,0, 0],
+          "ax_d_st": [45,0, 0],
+          "ax_d_lab":[20,0,20]
+        },
+        "edges": {
+          "ax_start":["ax_ent"],
+          "ax_ent":["ax_start","ax_hall_s"],
+          "ax_hall_w":["ax_hall_c","ax_d_ws"],
+          "ax_hall_c":["ax_hall_w","ax_hall_e","ax_d_ws","ax_d_st"],
+          "ax_hall_e":["ax_hall_c","ax_d_st"],
+          "ax_hall_s":["ax_ent","ax_hall_c","ax_d_lab"],
+          "ax_d_ws":["ax_hall_w","ax_hall_c"],
+          "ax_d_st":["ax_hall_c","ax_hall_e"],
+          "ax_d_lab":["ax_hall_s"]
+        },
+        "room_node_map": {
+          "anx_workshop":"ax_d_ws",
+          "anx_storage":"ax_d_st",
+          "anx_lab":"ax_d_lab"
+        }
+      }
+    }
+  ],
+  "vertical_connections": []
+}

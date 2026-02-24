@@ -1,0 +1,19 @@
+{
+  "campus_name": "Riverside School District",
+  "buildings": [
+    {
+      "id": "school_main",
+      "display_name": "Main School Building",
+      "file": "res://assets/buildings/school_main.json",
+      "gps_anchor": { "lat": 47.543, "lon": -122.012 },
+      "gps_detection_radius_m": 50.0
+    },
+    {
+      "id": "annex_b",
+      "display_name": "Annex B",
+      "file": "res://assets/buildings/annex_b.json",
+      "gps_anchor": { "lat": 47.544, "lon": -122.013 },
+      "gps_detection_radius_m": 50.0
+    }
+  ]
+}
