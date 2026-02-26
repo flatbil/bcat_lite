@@ -55,6 +55,13 @@ func load_building_data(building_id: String) -> Dictionary:
 
 # Equirectangular distance check; emits building_detected when a new building
 # is within its gps_detection_radius_m.  Returns the detected building_id or "".
+func get_building_gps_anchor(building_id: String) -> Dictionary:
+	for b in _buildings:
+		if b["id"] == building_id:
+			return b.get("gps_anchor", {})
+	return {}
+
+
 func detect_building(lat: float, lon: float) -> String:
 	var best_id   := ""
 	var best_dist := 1e9

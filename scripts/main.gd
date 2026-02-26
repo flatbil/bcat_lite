@@ -5,7 +5,9 @@ extends Node3D
 @onready var navigator:    Node    = $Navigator
 @onready var room_manager: Node    = $RoomManager
 @onready var path_display: Node3D  = $PathDisplay
+@onready var tile_map:     Node3D  = $TileMap3D
 @onready var ui:           Control = $CanvasLayer/Ui
+@onready var room_labels:  Control = $CanvasLayer/RoomLabels
 @onready var player:       Node3D  = $Player
 @onready var sim_loc:      Node    = $SimLocation
 @onready var campus_mgr:   Node    = $CampusManager
@@ -17,6 +19,8 @@ var _sensor_mode:         bool       = false
 var _current_building_id: String     = ""
 var _active_floor:        int        = 0
 var _last_cam_y:          float      = -1.0   # track zoom for path/player scale
+var _tap_press_pos:       Vector2    = Vector2(-999, -999)
+var _room_clicked_this_tap: bool     = false   # prevents deselect when room was tapped
 
 
 func _ready() -> void:
@@ -33,6 +37,7 @@ func _ready() -> void:
 	ui.reset_position_requested.connect(_on_reset_position)
 	ui.building_selected.connect(load_building)
 	ui.floor_selected.connect(switch_floor)
+	ui.recenter_requested.connect(_on_recenter)
 
 	sim_loc.location_changed.connect(_on_sim_location_changed)
 	sim_loc.gps_fix.connect(_on_gps_fix)
@@ -40,6 +45,9 @@ func _ready() -> void:
 	campus_mgr.building_list_loaded.connect(_on_building_list_loaded)
 	campus_mgr.building_detected.connect(load_building)
 	campus_mgr.load_campus()
+
+	room_labels.setup(get_node("Camera3D") as Camera3D)
+	room_labels.room_label_clicked.connect(_on_room_info_requested)
 
 
 func _on_building_list_loaded() -> void:
@@ -65,12 +73,20 @@ func load_building(building_id: String) -> void:
 	navigator.load_building_graph(data)
 
 	var entrance: Vector3 = building.get_entrance()
+
+	# OSM tile background — map GPS anchor to building entrance in world space
+	var anchor: Dictionary = campus_mgr.get_building_gps_anchor(building_id)
+	if anchor.has("lat"):
+		tile_map.setup(float(anchor["lat"]), float(anchor["lon"]), entrance)
 	player.position = entrance
 	sim_loc.set_start_position(entrance)
 
 	_active_floor = 0
 	ui.set_floors(building.get_floors(), _active_floor)
 	ui.set_room_data(building.get_room_data())
+	room_labels.set_rooms(building.get_room_data())
+	room_labels.set_overlays(building.get_overlay_labels())
+	room_labels.set_active_floor(0)
 	room_manager.set_building(building_id)
 	room_manager.fetch_rooms()
 
@@ -81,6 +97,7 @@ func switch_floor(floor_index: int) -> void:
 	_active_floor = floor_index
 	building.set_active_floor(floor_index)
 	ui.set_active_floor(floor_index)
+	room_labels.set_active_floor(floor_index)
 	var cam := get_node_or_null("Camera3D")
 	if cam and cam.has_method("set_look_at_y"):
 		cam.set_look_at_y(float(floor_index) * 4.0)
@@ -127,6 +144,8 @@ func _on_rooms_updated(data: Dictionary) -> void:
 
 # 3D click OR left-panel ℹ button → show meeting popup
 func _on_room_info_requested(room_id: String) -> void:
+	_room_clicked_this_tap = true   # block the pending tap-deselect for this press cycle
+	room_labels.set_selected(room_id)
 	var data: Dictionary = _rooms_data.get(room_id, {})
 	if data.is_empty():
 		for r in building.get_room_data():
@@ -151,6 +170,7 @@ func _navigate_to(room_id: String) -> void:
 	var pts: Array = navigator.route_to_room(player.global_position, room_id)
 	_draw_path(pts)
 	building.select_room(room_id)
+	room_labels.set_selected(room_id)
 	ui.show_navigation(room_id, pts)
 
 
@@ -172,10 +192,10 @@ func _draw_path(points: Array) -> void:
 		var mid := (a + b) * 0.5
 		var seg  := MeshInstance3D.new()
 		var box  := BoxMesh.new()
-		box.size = Vector3(0.45 * s, 0.22 * s, length)
+		box.size = Vector3(0.55 * s, 0.10 * s, length)
 		seg.mesh = box
-		seg.material_override = _path_mat(Color(1.0, 0.88, 0.0), Color(0.9, 0.65, 0.0))
-		seg.position   = Vector3(mid.x, mid.y + 0.14 * s, mid.z)
+		seg.material_override = _path_mat(Color(0.259, 0.522, 0.957), Color(0.1, 0.35, 0.8))
+		seg.position   = Vector3(mid.x, mid.y + 0.06 * s, mid.z)
 		seg.rotation.y = atan2(dir.x, dir.z)
 		path_display.add_child(seg)
 
@@ -185,7 +205,7 @@ func _draw_path(points: Array) -> void:
 		sphere.radius = 0.28 * s
 		sphere.height = 0.56 * s
 		dot.mesh = sphere
-		dot.material_override = _path_mat(Color(1.0, 0.45, 0.0), Color(0.8, 0.25, 0.0))
+		dot.material_override = _path_mat(Color(0.259, 0.522, 0.957), Color(0.1, 0.35, 0.8))
 		dot.position = Vector3(pt.x, pt.y + 0.28 * s, pt.z)
 		path_display.add_child(dot)
 
@@ -213,12 +233,41 @@ func _path_mat(col: Color, emit: Color) -> StandardMaterial3D:
 	return mat
 
 
+# Tap on empty 3D space (not a room, not UI) → deselect current room/route.
+# Uses press→release distance check to ignore camera pan gestures.
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_tap_press_pos         = event.position
+			_room_clicked_this_tap = false   # reset for fresh press
+		else:
+			# Only deselect if no room was identified for this tap.
+			# _room_clicked_this_tap is set by _on_room_info_requested which fires
+			# after physics picking (which runs after _unhandled_input for the press).
+			if not _room_clicked_this_tap \
+					and event.position.distance_to(_tap_press_pos) < 12.0:
+				_clear_route()
+				ui.on_map_deselect()
+			_tap_press_pos = Vector2(-999, -999)
+	elif event is InputEventScreenTouch and event.index == 0:
+		if event.pressed:
+			_tap_press_pos         = event.position
+			_room_clicked_this_tap = false
+		else:
+			if not _room_clicked_this_tap \
+					and event.position.distance_to(_tap_press_pos) < 12.0:
+				_clear_route()
+				ui.on_map_deselect()
+			_tap_press_pos = Vector2(-999, -999)
+
+
 func _clear_route() -> void:
 	_current_dest   = ""
 	_last_route_pos = Vector3(1e9, 1e9, 1e9)
 	for child in path_display.get_children():
 		child.queue_free()
 	building.clear_selection()
+	room_labels.set_selected("")
 
 
 # ── Sensor / location callbacks ───────────────────────────────────────────────
@@ -247,3 +296,19 @@ func _on_reset_position() -> void:
 	var entrance: Vector3 = building.get_entrance()
 	player.position = entrance
 	sim_loc.set_start_position(entrance)
+
+
+# Recenter button — snap camera above the player at a comfortable zoom level.
+# Camera pitch is fixed at -0.852 rad (-48.8°), so for height h the camera
+# must sit at Z = player_z + h * (cos(0.852)/sin(0.852)) ≈ player_z + h * 0.876
+# for its forward ray to intersect the ground exactly at the player.
+func _on_recenter() -> void:
+	var cam := get_node_or_null("Camera3D")
+	if cam == null or not is_instance_valid(player):
+		return
+	var h: float = clampf(cam.global_position.y, 30.0, 70.0)
+	cam.global_position = Vector3(
+		player.global_position.x,
+		h,
+		player.global_position.z + h * 0.876
+	)

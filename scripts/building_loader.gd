@@ -21,6 +21,7 @@ var _active_floor:   int        = 0
 var _selected_id:    String     = ""
 var _availability:   Dictionary = {}
 var _entrance:       Vector3    = Vector3(50, 0, 44)
+var _overlay_labels: Array      = []   # [{text, world_pos, floor_index, color}] — fed to RoomLabels
 
 
 # ── Public: load a building from a parsed JSON dict ───────────────────────────
@@ -45,7 +46,8 @@ func load_building(data: Dictionary) -> void:
 	var ent        = data.get("entrance", [50, 0, 44])
 	_entrance      = Vector3(float(ent[0]), float(ent[1]), float(ent[2]))
 
-	_floors_data   = data.get("floors", [])
+	_floors_data    = data.get("floors", [])
+	_overlay_labels = []
 	var vc_list: Array = data.get("vertical_connections", [])
 
 	for floor_dict in _floors_data:
@@ -107,17 +109,9 @@ func _generate_floor(floor_dict: Dictionary, fi: int, y_off: float, parent: Node
 		# Room body is NOT ray-pickable — click target is the label hit-area below
 		body.input_ray_pickable = false
 
-		var lbl_y: float = sz.y * 0.65
-		var lbl       := Label3D.new()
-		var cap: int   = int(rd.get("capacity", 0))
-		lbl.text       = "%s\n(cap %d)" % [rd["name"], cap]
-		lbl.position   = Vector3(0, lbl_y, 0)
-		lbl.billboard  = BaseMaterial3D.BILLBOARD_ENABLED
-		lbl.font_size  = 7
-		lbl.fixed_size = true
-		body.add_child(lbl)
+		var lbl_y: float = sz.y * 0.65   # used for hit-area positioning only
 
-		# Small flat hit-area at the label position — this is what the player clicks
+		# Small flat hit-area — this is what the player clicks in 3D
 		var lb_body := StaticBody3D.new()
 		lb_body.position = Vector3(0, lbl_y, 0)
 		lb_body.name     = "LabelHit_" + id
@@ -135,6 +129,7 @@ func _generate_floor(floor_dict: Dictionary, fi: int, y_off: float, parent: Node
 		var entry = rd.duplicate()
 		entry["floor_index"] = fi
 		entry["available"]   = true
+		entry["world_pos"]   = pos   # room centre in world space — used by RoomLabels
 		_all_rooms.append(entry)
 
 
@@ -194,15 +189,10 @@ func _generate_vertical_connections(vc_list: Array) -> void:
 			var y: float = fi * _floor_height
 			# Grey stairwell box visible at each connected floor level
 			_slab(fn, Vector3(x, y + 2.0, z), Vector3(4, 4, 4), STAIR_COLOR)
-			# Small label
-			var lbl       := Label3D.new()
-			lbl.text       = "STAIRS"
-			lbl.position   = Vector3(x, y + 4.5, z)
-			lbl.billboard  = BaseMaterial3D.BILLBOARD_ENABLED
-			lbl.font_size  = 6
-			lbl.fixed_size = true
-			lbl.modulate   = Color(0.9, 0.85, 0.7)
-			fn.add_child(lbl)
+			_overlay_labels.append({"text": "STAIRS",
+					"world_pos":   Vector3(x, y + 2.0, z),
+					"floor_index": fi,
+					"color":       Color(0.9, 0.85, 0.7)})
 
 
 func _get_floor_node(fi: int) -> Node3D:
@@ -225,14 +215,10 @@ func _build_entrance_marker() -> void:
 	mi.position = _entrance + Vector3(0, 0.03, 0)
 	add_child(mi)
 
-	var lbl       := Label3D.new()
-	lbl.text       = "ENTRANCE"
-	lbl.position   = _entrance + Vector3(0, 2.0, 0)
-	lbl.billboard  = BaseMaterial3D.BILLBOARD_ENABLED
-	lbl.modulate   = Color(0.0, 0.6, 1.0)
-	lbl.font_size  = 8
-	lbl.fixed_size = true
-	add_child(lbl)
+	_overlay_labels.append({"text": "ENTRANCE",
+			"world_pos":   _entrance + Vector3(0, 0.5, 0),
+			"floor_index": 0,
+			"color":       Color(0.2, 0.7, 1.0)})
 
 
 func _slab(parent: Node3D, pos: Vector3, sz: Vector3, col: Color) -> void:
@@ -302,6 +288,7 @@ func _on_room_input_event(_cam, event, _pos, _normal, _idx, room_id: String) -> 
 			and event.pressed \
 			and event.button_index == MOUSE_BUTTON_LEFT:
 		room_clicked.emit(room_id)
+		get_viewport().set_input_as_handled()
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
@@ -359,3 +346,7 @@ func get_floors() -> Array:
 
 func get_entrance() -> Vector3:
 	return _entrance
+
+
+func get_overlay_labels() -> Array:
+	return _overlay_labels

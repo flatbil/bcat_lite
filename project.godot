@@ -18,19 +18,20 @@ config/run/main_scene="res://scenes/Main.tscn"
 
 [display]
 
-window/size/viewport_width=960
-window/size/viewport_height=540
+window/size/viewport_width=540
+window/size/viewport_height=960
+window/handheld/orientation=1
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
 [input_devices]
 
-pointing/emulate_touch_from_mouse=true
 sensors/enable_accelerometer=true
 sensors/enable_gyroscope=true
 sensors/enable_magnetometer=true
+pointing/emulate_touch_from_mouse=true
 
 [rendering]
 
-textures/vram_compression/import_etc2_astc=true
 renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true

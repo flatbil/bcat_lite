@@ -17,41 +17,71 @@ func _ready() -> void:
 	_build_visual()
 
 func _build_visual() -> void:
-	# Glowing cyan cylinder body
-	var mi  = MeshInstance3D.new()
-	var cyl = CylinderMesh.new()
-	cyl.height        = 1.8
-	cyl.top_radius    = 0.22
-	cyl.bottom_radius = 0.22
-	mi.mesh = cyl
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color               = Color(0.0, 0.85, 1.0)
+	var teal  := Color(0.0,  0.737, 0.831)  # #00bcd4
+	var teal2 := Color(0.0,  0.40,  0.60)   # darker emission
+
+	# Pin stem — thin cylinder from ground up to the head
+	var stem_mi  := MeshInstance3D.new()
+	var stem_cyl := CylinderMesh.new()
+	stem_cyl.height        = 1.0
+	stem_cyl.top_radius    = 0.07
+	stem_cyl.bottom_radius = 0.07
+	stem_mi.mesh = stem_cyl
+	stem_mi.material_override = _pin_mat(teal, teal2)
+	stem_mi.position = Vector3(0, 0.5, 0)
+	add_child(stem_mi)
+
+	# Pin head — sphere sitting on top of the stem
+	var head_mi     := MeshInstance3D.new()
+	var head_sphere := SphereMesh.new()
+	head_sphere.radius = 0.38
+	head_sphere.height = 0.76
+	head_mi.mesh = head_sphere
+	head_mi.material_override = _pin_mat(teal, teal2)
+	head_mi.position = Vector3(0, 1.28, 0)
+	add_child(head_mi)
+
+	# Ground shadow disk
+	var shd_mi  := MeshInstance3D.new()
+	var shd_cyl := CylinderMesh.new()
+	shd_cyl.height        = 0.04
+	shd_cyl.top_radius    = 0.28
+	shd_cyl.bottom_radius = 0.28
+	shd_mi.mesh = shd_cyl
+	var shd_mat := StandardMaterial3D.new()
+	shd_mat.albedo_color = Color(0, 0, 0, 0.35)
+	shd_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	shd_mi.material_override = shd_mat
+	shd_mi.position = Vector3(0, 0.02, 0)
+	add_child(shd_mi)
+
+	# Billboard "YOU" label
+	var lbl       := Label3D.new()
+	lbl.text       = "YOU"
+	lbl.font_size  = 36
+	lbl.pixel_size = 0.0025
+	lbl.billboard  = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl.modulate   = Color(1.0, 1.0, 1.0)
+	lbl.position   = Vector3(0, 2.1, 0)
+	add_child(lbl)
+
+
+func _pin_mat(col: Color, emit: Color) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color               = col
 	mat.emission_enabled           = true
-	mat.emission                   = Color(0.0, 0.45, 0.9)
-	mat.emission_energy_multiplier = 1.4
-	# Ghost pass: outline visible through walls at low opacity
-	var ghost = StandardMaterial3D.new()
-	ghost.albedo_color               = Color(0.0, 0.85, 1.0, 0.22)
+	mat.emission                   = emit
+	mat.emission_energy_multiplier = 1.2
+	var ghost := StandardMaterial3D.new()
+	ghost.albedo_color               = Color(col.r, col.g, col.b, 0.18)
 	ghost.emission_enabled           = true
-	ghost.emission                   = Color(0.0, 0.45, 0.9)
-	ghost.emission_energy_multiplier = 0.6
+	ghost.emission                   = emit
+	ghost.emission_energy_multiplier = 0.4
 	ghost.transparency               = BaseMaterial3D.TRANSPARENCY_ALPHA
 	ghost.no_depth_test              = true
 	ghost.render_priority            = 1
 	mat.next_pass = ghost
-	mi.material_override = mat
-	mi.position = Vector3(0, 0.9, 0)
-	add_child(mi)
-
-	# Billboard label — fixed screen size like a Google Maps pin
-	var lbl = Label3D.new()
-	lbl.text       = "YOU"
-	lbl.font_size  = 9
-	lbl.pixel_size = 0.010
-	lbl.billboard  = BaseMaterial3D.BILLBOARD_ENABLED
-	lbl.modulate   = Color(0.0, 1.0, 1.0)
-	lbl.position   = Vector3(0, 2.1, 0)
-	add_child(lbl)
+	return mat
 
 func _process(delta: float) -> void:
 	var dir := Vector3.ZERO

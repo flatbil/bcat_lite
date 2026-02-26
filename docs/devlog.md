@@ -314,6 +314,82 @@ z  = anchor_bz + dz
 - `sim_location.gd` uses its own hardcoded `API_BASE = "http://127.0.0.1:8000"` — update alongside `room_manager.gd` for Android LAN deployment
 - companion.html saves server URL to `localStorage` so it survives page reload
 
+---
+
+## Session 6 — OSM tile background + Google Maps UI redesign
+
+**Goal:** Real-world scale OSM map tiles as ground plane; Google Maps-style dark-theme UI.
+
+### OSM tile system (`scripts/tile_map.gd`)
+
+- New `OsmTileMap` class (extends Node3D); call `setup(lat, lon, world_pos)` per building load
+- Fetches 5×5 grid (GRID_R=2) of tiles at zoom 18 (~103 m/tile at lat 47°)
+- 4 concurrent `HTTPRequest` pool; tiles at Y=−0.05 (floor slab at Y=0 covers inside, tiles show outside)
+- Web Mercator math: `_lon_to_tx`, `_lat_to_ty`, `_calc_frac` → `_tile_center(tx, ty)`
+- UV(0,0)=NW correct after QuadMesh −90° X rotation
+- Added `campus_manager.get_building_gps_anchor(id)` helper
+
+### UI redesign (`scenes/ui.gd`)
+
+Full rewrite. Same public signal/method API — `main.gd` unchanged.
+
+| Old | New |
+|---|---|
+| Left sidebar room list | Full-screen map + bottom drawer |
+| Right nav panel | DETAIL card at bottom |
+| Light default theme | Dark `#2a2a2a` theme |
+| Yellow 3D route boxes | Flat blue (#4285f4-ish) route line |
+| Cyan cylinder player | Teal teardrop pin (sphere head + stem) |
+
+**3-state bottom drawer:**
+- `HOME` — "Common Destinations" | "Saved" tab bar (72 px)
+- `LIST` — slides up to 62% height; rooms grouped Popular / Other; coloured emoji icon circles
+- `DETAIL` — 234 px card: name, floor, 🚶 ETA, availability, Save, full-width green Go button
+
+**Category → emoji + colour:**
+food🍽(red) coffee☕(orange) restroom🚻(blue) gym🏀(orange) lab🔬(green) library📚(teal) nurse⚕(red) fitness💪(purple) office🏢(blue) storage📦(grey)
+
+**ETA:** route point distances / 84 m·min⁻¹ walking pace → "X min"
+
+**Player marker (`scripts/player.gd`):**
+Teal pin: head SphereMesh (r=0.38) at Y=1.28 + stem CylinderMesh + shadow disk; ghost next_pass for visibility through walls.
+
+---
+
+## Session 7 — 2D room labels, infinite OSM tiles, UI polish
+
+### 2D screen-space room labels (`scripts/room_labels.gd` — new file)
+
+Replaced all `Label3D` nodes with a Control-based RTS health-bar system:
+
+- `setup(cam)` → stores Camera3D ref, fills `PRESET_FULL_RECT`, sets `MOUSE_FILTER_IGNORE`
+- `set_rooms(arr)` / `set_overlays(arr)` — build PanelContainer + Label nodes on load, pre-measure sizes with `ThemeDB.fallback_font.get_string_size()` so overlap checks are correct on frame 1
+- `_update_labels()` — every call: hide all; project world_pos → screen via `camera.unproject_position()`; greedy placement: sort by priority (selected=2, room=1, overlay=0) then screen Y; place each only if `rect.grow(OVERLAP_GAP)` doesn't intersect any already-placed rect
+- Only runs when camera actually moves (`_dirty` flag + transform cache) — no per-frame work while camera is static
+- `room_label_clicked(room_id)` signal wired into `main._on_room_info_requested()`
+
+**ENTRANCE / STAIRS overlays:** removed from `building_loader.gd` as Label3D; now collected in `_overlay_labels` array and exposed via `get_overlay_labels()`. Both render through the same greedy placement at priority 0 (always yield to room labels).
+
+### Infinite procedural OSM tile streaming (`scripts/tile_map.gd` — rewritten)
+
+| Before | After |
+|---|---|
+| Fixed 7×7 grid loaded at `setup()` | Procedural: load within `LOAD_R=2` tiles of camera, free beyond `UNLOAD_R=4` |
+| 4 HTTP workers | 8 HTTP workers |
+| Gray void beyond grid | `RenderingServer.set_default_clear_color()` fills everything beyond tiles — zero geometry, zero z-fighting |
+
+Key change: `_process()` calls `_world_to_tile(cam.global_position)` → `Vector2i` each frame. Work only happens when the camera crosses a tile boundary. `_unload_far()` frees `MeshInstance3D` references; the callback `_tiles.has(key)` guard discards in-flight responses for freed tiles.
+
+**Backdrop z-fighting fix:** previous session added a large quad 2 cm below the tile layer which depth-fought with tiles during camera movement. Removed entirely; `set_default_clear_color` replaces it with zero rendering cost.
+
+### UI polish
+
+- **Font sizes** — all `add_theme_font_size_override` values ×1.2 across `ui.gd`
+- **Joystick** — hidden when sensor mode is ON; shown when OFF
+- **Tap-to-deselect** — `_unhandled_input` tracks press position; on release checks `_room_clicked_this_tap` flag (set by the physics `input_event` callback which fires between press and release) before deselecting
+- **Finger-scrollable list** — `MOUSE_FILTER_PASS` on row Buttons, dividers, and section headers so drag propagates to ScrollContainer
+- **Recenter button** (`⊙`, bottom-left, accent blue) — `ui.recenter_requested` → `main._on_recenter()` positions camera so its fixed-pitch forward ray intersects the ground at the player: `cam_z = player_z + h * 0.876` (derived from pitch −0.852 rad)
+
 ## Pending / Future work
 
 - **Satellite map overlay:** Godot cannot fetch tile imagery at runtime. To add an aerial floor texture, drop a PNG into `assets/` and apply it as an albedo texture on the main floor slab in `building_loader.gd`.

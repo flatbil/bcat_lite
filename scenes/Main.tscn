@@ -9,12 +9,14 @@
 [ext_resource type="Script" path="res://scripts/player.gd" id="7_player"]
 [ext_resource type="Script" path="res://scripts/sim_location.gd" id="8_simloc"]
 [ext_resource type="Script" path="res://scripts/campus_manager.gd" id="9_campusmgr"]
+[ext_resource type="Script" path="res://scripts/tile_map.gd" id="10_tilemap"]
+[ext_resource type="Script" path="res://scripts/room_labels.gd" id="11_rlabels"]
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
 
 [node name="Camera3D" type="Camera3D" parent="."]
-position = Vector3(50, 75, 58)
+position = Vector3(50, 120, 58)
 rotation = Vector3(-0.852, 0, 0)
 script = ExtResource("6_cam")
 
@@ -34,6 +36,9 @@ script = ExtResource("3_rm")
 
 [node name="PathDisplay" type="Node3D" parent="."]
 
+[node name="TileMap3D" type="Node3D" parent="."]
+script = ExtResource("10_tilemap")
+
 [node name="Player" type="Node3D" parent="."]
 position = Vector3(50, 0, 44)
 script = ExtResource("7_player")
@@ -45,5 +50,8 @@ script = ExtResource("8_simloc")
 script = ExtResource("9_campusmgr")
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="RoomLabels" type="Control" parent="CanvasLayer"]
+script = ExtResource("11_rlabels")
 
 [node name="Ui" parent="CanvasLayer" instance=ExtResource("5_ui")]
